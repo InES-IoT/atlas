@@ -12,3 +12,6 @@ name = "atlas"
 path = "src/lib.rs"
 
 [dependencies]
+rustc-demangle = "0.1.21"
+cpp_demangle = "0.3.5"
+cargo-lock = "7.0.1"
