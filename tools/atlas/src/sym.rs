@@ -42,9 +42,12 @@
 use cargo_lock::{Lockfile, Package};
 use cpp_demangle;
 use rustc_demangle::try_demangle;
+use std::borrow::Cow;
+use std::borrow::ToOwned;
 use std::convert::From;
 use std::error::Error;
 use std::fmt;
+use std::fmt::{Debug, Display};
 use std::io;
 use std::path::Path;
 use std::str::FromStr;
@@ -217,15 +220,34 @@ impl From<Symbol> for SymbolGuess {
 
 #[derive(Debug)]
 pub struct Guesser {
-    packages: Vec<Package>,
+    packages: Vec<String>,
 }
 
 impl Guesser {
-    pub fn new(lock: impl AsRef<Path>) -> Result<Self, SymbolParseError> {
+    pub fn new<'a, T, U>(packages: T) -> Self
+    where
+        T: Into<Cow<'a, [U]>>,
+        U: 'a + Clone + AsRef<str>
+    {
+        Guesser {
+            packages: packages
+                .into()
+                .into_owned()
+                .into_iter()
+                .map(|p| p.as_ref().replace("-", "_"))
+                .collect(),
+        }
+    }
+
+    pub fn from_lock(lock: impl AsRef<Path>) -> Result<Self, SymbolParseError> {
         let lockfile = Lockfile::load(lock).map_err(|_e| SymbolParseError(()))?;
 
         Ok(Guesser {
-            packages: lockfile.packages,
+            packages: lockfile
+                .packages
+                .into_iter()
+                .map(|p| p.name.as_str().replace("-", "_"))
+                .collect(),
         })
     }
 }
@@ -408,38 +430,78 @@ mod guesser_tests {
     use super::*;
 
     #[test]
-    fn new_valid() {
-        let mut lock = std::env::current_dir().unwrap();
-        lock.push("./aux/Cargo.lock");
-        let lock = lock.canonicalize().unwrap();
-        let gsr = Guesser::new(lock).unwrap();
-        assert_eq!(gsr.packages.len(), 19);
-        assert_eq!(gsr.packages[0].name.as_str(), "bare-metal");
-        assert_eq!(gsr.packages[18].name.as_str(), "zephyr-alloc");
+    fn new_vec_string() {
+        let v = vec![String::from("bare-metal"), String::from("cstr_core")];
+        let gsr = Guesser::new(v);
+        assert_eq!(gsr.packages, ["bare_metal", "cstr_core"]);
+        // let _ = v.len();  // v moved by "Guesser::new()"
     }
 
     #[test]
-    fn new_invalid() {
+    fn new_slice_string() {
+        let v = vec![String::from("bare-metal"), String::from("cstr_core")];
+        let gsr = Guesser::new(&v[..]);
+        assert_eq!(gsr.packages, ["bare_metal", "cstr_core"]);
+        let _ = v.len();  // v still valid
+    }
+
+    #[test]
+    fn new_slice_str() {
+        let v = vec!["bare-metal", "cstr_core"];
+        let gsr = Guesser::new(&v[..]);
+        assert_eq!(gsr.packages, ["bare_metal", "cstr_core"]);
+        let _ = v.len();  // v still valid
+    }
+
+    #[test]
+    fn from_lock_valid() {
+        let mut lock = std::env::current_dir().unwrap();
+        lock.push("./aux/Cargo.lock");
+        let lock = lock.canonicalize().unwrap();
+        let gsr = Guesser::from_lock(lock).unwrap();
+        assert_eq!(gsr.packages.len(), 19);
+        println!("{:?}", gsr.packages);
+        assert_eq!(
+            gsr.packages,
+            [
+                "bare_metal",
+                "bitfield",
+                "cfg_if",
+                "cortex_m",
+                "cstr_core",
+                "cty",
+                "embedded_hal",
+                "memchr",
+                "nb",
+                "nb",
+                "panic_halt",
+                "rustc_version",
+                "secprint",
+                "semver",
+                "semver_parser",
+                "vcell",
+                "void",
+                "volatile_register",
+                "zephyr_alloc"
+            ]
+        );
+    }
+
+    #[test]
+    fn from_lock_invalid() {
         let mut lock = std::env::current_dir().unwrap();
         lock.push("./aux/rust_minimal_node.elf");
         let lock = lock.canonicalize().unwrap();
-        assert!(Guesser::new(lock).is_err());
+        assert!(Guesser::from_lock(lock).is_err());
     }
+
+    #[test]
+    fn guess_rust() {}
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn hehe() {
-        let lockfile = Lockfile::load(
-            "/home/mario/github/rust4iot/apps/rust_minimal_node/rustmod/secprint/Cargo.lock",
-        )
-        .unwrap();
-        // let lockfile = Lockfile::load("Cargo.lock").unwrap();
-        println!("number of dependencies: {}", lockfile.packages.len());
-    }
 
     #[test]
     fn lulu() {
