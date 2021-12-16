@@ -250,6 +250,10 @@ impl Guesser {
                 .collect(),
         })
     }
+
+    pub fn guess(&self, mangled: Symbol, demangled: Symbol) -> SymbolGuess {
+        SymbolGuess::default()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -496,7 +500,79 @@ mod guesser_tests {
     }
 
     #[test]
-    fn guess_rust() {}
+    fn guess_rust() {
+        let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
+        let guess = gsr.guess(Symbol::from_str("0002e1d4 00000022 T _ZN9cstr_core7CString3new17hed72bf580cc06965E").unwrap(),
+            Symbol::from_str("0002e1d4 00000022 T cstr_core::CString::new").unwrap());
+        
+        assert_eq!(guess.addr, 0x0002_e1d4);
+        assert_eq!(guess.size, 0x0000_0022);
+        assert_eq!(guess.sym_type, SymbolType::TextSection);
+        assert_eq!(guess.name, "cstr_core::CString::new");
+        assert_eq!(guess.lang, SymbolLang::Rust);
+    }
+
+    #[test]
+    fn guess_rust_generic_func() {
+        let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
+        let guess = gsr.guess(Symbol::from_str("0002ea9e 0000001c T _ZN4core3ptr39drop_in_place$LT$cstr_core..CString$GT$17h687c6bdfaf214436E").unwrap(),
+            Symbol::from_str("0002ea9e 0000001c T core::ptr::drop_in_place<cstr_core::CString>").unwrap());
+        
+        assert_eq!(guess.addr, 0x0002_ea9e);
+        assert_eq!(guess.size, 0x0000_001c);
+        assert_eq!(guess.sym_type, SymbolType::TextSection);
+        assert_eq!(guess.name, "core::ptr::drop_in_place<cstr_core::CString>");
+        assert_eq!(guess.lang, SymbolLang::Rust);
+    }
+
+    #[test]
+    fn guess_rust_trait_impl() {
+        let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
+        let guess = gsr.guess(Symbol::from_str("0002eb78 00000022 t _ZN60_$LT$cstr_core..CString$u20$as$u20$core..ops..drop..Drop$GT$4drop17h462206ac2c399119E").unwrap(),
+            Symbol::from_str("0002eb78 00000022 t <cstr_core::CString as core::ops::drop::Drop>::drop").unwrap());
+        
+        assert_eq!(guess.addr, 0x0002_eb78);
+        assert_eq!(guess.size, 0x0000_0022);
+        assert_eq!(guess.sym_type, SymbolType::TextSection);
+        assert_eq!(guess.name, "<cstr_core::CString as core::ops::drop::Drop>::drop");
+        assert_eq!(guess.lang, SymbolLang::Rust);
+    }
+    
+    #[test]
+    fn guess_cpp() {
+        let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
+        let guess = gsr.guess(Symbol::from_str("0004462c 000002f4 R _ZN2ot3Cli11Interpreter9sCommandsE").unwrap(),
+            Symbol::from_str("0004462c 000002f4 R ot::Cli::Interpreter::sCommands").unwrap());
+        assert_eq!(guess.addr, 0x0004_462c);
+        assert_eq!(guess.size, 0x0000_02f4);
+        assert_eq!(guess.sym_type, SymbolType::ReadOnlyDataSection);
+        assert_eq!(guess.name, "ot::Cli::Interpreter::sCommands");
+        assert_eq!(guess.lang, SymbolLang::Cpp);
+    }
+
+    #[test]
+    fn guess_cpp_could_be_rust() {
+        let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
+        let guess = gsr.guess(Symbol::from_str("0001c36c 00000028 W _ZN2ot10LinkedListINS_15AddressResolver10CacheEntryEE3PopEv").unwrap(),
+            Symbol::from_str("0001c36c 00000028 W ot::LinkedList<ot::AddressResolver::CacheEntry>::Pop()").unwrap());
+        assert_eq!(guess.addr, 0x0001_c36c);
+        assert_eq!(guess.size, 0x0000_0028);
+        assert_eq!(guess.sym_type, SymbolType::Weak);
+        assert_eq!(guess.name, "ot::LinkedList<ot::AddressResolver::CacheEntry>::Pop()");
+        assert_eq!(guess.lang, SymbolLang::Cpp);
+    }
+
+    #[test]
+    fn guess_c() {
+        let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
+        let guess = gsr.guess(Symbol::from_str("00008700 00000064 T net_if_up").unwrap(),
+            Symbol::from_str("00008700 00000064 T net_if_up").unwrap());
+        assert_eq!(guess.addr, 0x0000_8700);
+        assert_eq!(guess.size, 0x0000_0064);
+        assert_eq!(guess.sym_type, SymbolType::TextSection);
+        assert_eq!(guess.name, "net_if_up");
+        assert_eq!(guess.lang, SymbolLang::C);
+    }
 }
 
 #[cfg(test)]
