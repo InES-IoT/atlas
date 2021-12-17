@@ -41,6 +41,8 @@
 
 use cargo_lock::{Lockfile, Package};
 use cpp_demangle;
+use lazy_static::lazy_static;
+use regex::Regex;
 use rustc_demangle::try_demangle;
 use std::borrow::Cow;
 use std::borrow::ToOwned;
@@ -52,6 +54,7 @@ use std::io;
 use std::path::Path;
 use std::str::FromStr;
 use std::string::ToString;
+use syn;
 
 #[derive(PartialEq, Debug)]
 pub enum SymbolType {
@@ -109,15 +112,20 @@ impl FromStr for Symbol {
     type Err = SymbolParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut iter = s.split_ascii_whitespace();
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r"^\s*([0-9a-fA-F]{8})\s+([0-9a-fA-F]{8})\s+(\S)\s+(\S.*\S)\s*$")
+                    .unwrap();
+        }
 
-        let addr = u32::from_str_radix(iter.next().ok_or(SymbolParseError(()))?, 16)
+        let caps = RE.captures(s).ok_or(SymbolParseError(()))?;
+
+        let addr = u32::from_str_radix(caps.get(1).unwrap().as_str(), 16)
+            .map_err(|_e| SymbolParseError(()))?;
+        let size = u32::from_str_radix(caps.get(2).unwrap().as_str(), 16)
             .map_err(|_e| SymbolParseError(()))?;
 
-        let size = u32::from_str_radix(iter.next().ok_or(SymbolParseError(()))?, 16)
-            .map_err(|_e| SymbolParseError(()))?;
-
-        let sym_type = match iter.next().ok_or(SymbolParseError(()))? {
+        let sym_type = match caps.get(3).unwrap().as_str() {
             "A" => SymbolType::Absolute,
             "B" | "b" => SymbolType::BssSection,
             "C" | "c" => SymbolType::Common,
@@ -140,7 +148,7 @@ impl FromStr for Symbol {
             _ => return Err(SymbolParseError(())),
         };
 
-        let name = String::from(iter.next().ok_or(SymbolParseError(()))?);
+        let name = String::from(caps.get(4).unwrap().as_str());
 
         Ok(Symbol::new(addr, size, sym_type, name))
     }
@@ -195,8 +203,7 @@ impl From<Symbol> for SymbolGuess {
     fn from(sym: Symbol) -> Self {
         let demangled_rust = try_demangle(&sym.name);
         let demangled_cpp = cpp_demangle::Symbol::new(&sym.name);
-        dbg!(&demangled_rust);
-        dbg!(&demangled_cpp);
+        
         match (demangled_rust, demangled_cpp) {
             (Ok(rust), Err(_)) => SymbolGuess {
                 addr: sym.addr,
@@ -218,6 +225,8 @@ impl From<Symbol> for SymbolGuess {
     }
 }
 
+const SYSROOT_CRATES: &[&'static str] = &["std", "core", "proc_macro", "alloc", "test"];
+
 #[derive(Debug)]
 pub struct Guesser {
     packages: Vec<String>,
@@ -227,32 +236,101 @@ impl Guesser {
     pub fn new<'a, T, U>(packages: T) -> Self
     where
         T: Into<Cow<'a, [U]>>,
-        U: 'a + Clone + AsRef<str>
+        U: 'a + Clone + AsRef<str>,
     {
-        Guesser {
-            packages: packages
-                .into()
-                .into_owned()
-                .into_iter()
-                .map(|p| p.as_ref().replace("-", "_"))
-                .collect(),
-        }
+        let mut packages = packages
+            .into()
+            .into_owned()
+            .into_iter()
+            .map(|p| p.as_ref().replace("-", "_"))
+            .collect::<Vec<String>>();
+
+        packages.extend(SYSROOT_CRATES.iter().map(|&s| String::from(s)));
+
+        Guesser { packages }
     }
 
     pub fn from_lock(lock: impl AsRef<Path>) -> Result<Self, SymbolParseError> {
         let lockfile = Lockfile::load(lock).map_err(|_e| SymbolParseError(()))?;
 
-        Ok(Guesser {
-            packages: lockfile
-                .packages
-                .into_iter()
-                .map(|p| p.name.as_str().replace("-", "_"))
-                .collect(),
-        })
+        let mut packages = lockfile
+            .packages
+            .into_iter()
+            .map(|p| p.name.as_str().replace("-", "_"))
+            .collect::<Vec<String>>();
+
+        packages.extend(SYSROOT_CRATES.iter().map(|&s| String::from(s)));
+
+        Ok(Guesser { packages })
     }
 
-    pub fn guess(&self, mangled: Symbol, demangled: Symbol) -> SymbolGuess {
-        SymbolGuess::default()
+    pub fn guess(
+        &self,
+        mangled: Symbol,
+        demangled: Symbol,
+    ) -> Result<SymbolGuess, SymbolParseError> {
+        if (mangled.addr != demangled.addr)
+            && (mangled.size != demangled.size)
+            && (mangled.sym_type != demangled.sym_type)
+        {
+            return Err(SymbolParseError(()));
+        }
+
+        if mangled.name == demangled.name {
+            return Ok(SymbolGuess {
+                addr: mangled.addr,
+                size: mangled.size,
+                sym_type: mangled.sym_type,
+                name: mangled.name,
+                lang: SymbolLang::C,
+            });
+        }
+
+        let path = syn::parse_str::<syn::TypePath>(&demangled.name);
+
+        if path.is_err() {
+            return Ok(SymbolGuess {
+                addr: demangled.addr,
+                size: demangled.size,
+                sym_type: demangled.sym_type,
+                name: demangled.name,
+                lang: SymbolLang::Cpp,
+            });
+        }
+
+        let path = path.unwrap();
+
+        let path_segments = if path.qself.is_some() {
+            match *path.qself.unwrap().ty {
+                syn::Type::Path(qself_path) => qself_path.path.segments,
+                _ => return Err(SymbolParseError(())),
+            }
+        } else {
+            path.path.segments
+        };
+
+        let first_ident = match path_segments.first() {
+            Some(path_seg) => (*path_seg).ident.to_string(),
+            _ => return Err(SymbolParseError(())),
+        };
+
+        if self.packages.contains(&first_ident) {
+            Ok(SymbolGuess {
+                addr: demangled.addr,
+                size: demangled.size,
+                sym_type: demangled.sym_type,
+                name: demangled.name,
+                lang: SymbolLang::Rust,
+            })
+        } else {
+            Ok(SymbolGuess {
+                addr: demangled.addr,
+                size: demangled.size,
+                sym_type: demangled.sym_type,
+                name: demangled.name,
+                lang: SymbolLang::Cpp,
+            })
+        }
     }
 }
 
@@ -320,6 +398,59 @@ mod symbol_tests {
     }
 
     #[test]
+    fn fromstr_leading_trailing_whitespace() {
+        let s = Symbol::from_str("   00008700 00000064 T net_if_up    ");
+        assert!(s.is_ok());
+        let s = s.unwrap();
+        assert_eq!(s.addr, 0x00008700);
+        assert_eq!(s.size, 0x00000064);
+        assert_eq!(s.sym_type, SymbolType::TextSection);
+        assert_eq!(s.name, String::from("net_if_up"));
+    }
+
+    #[test]
+    fn fromstr_trait_impl() {
+        let s = Symbol::from_str(
+            " 0002eb78 00000022 t   <cstr_core::CString as core::ops::drop::Drop>::drop  ",
+        );
+        assert!(s.is_ok());
+        let s = s.unwrap();
+        assert_eq!(s.addr, 0x0002eb78);
+        assert_eq!(s.size, 0x00000022);
+        assert_eq!(s.sym_type, SymbolType::TextSection);
+        assert_eq!(
+            s.name,
+            String::from("<cstr_core::CString as core::ops::drop::Drop>::drop")
+        );
+    }
+
+    #[test]
+    fn fromstr_generic_func() {
+        let s =
+            Symbol::from_str("0002ea9e    0000001c T core::ptr::drop_in_place<cstr_core::CString>");
+        assert!(s.is_ok());
+        let s = s.unwrap();
+        assert_eq!(s.addr, 0x0002ea9e);
+        assert_eq!(s.size, 0x0000001c);
+        assert_eq!(s.sym_type, SymbolType::TextSection);
+        assert_eq!(
+            s.name,
+            String::from("core::ptr::drop_in_place<cstr_core::CString>")
+        );
+    }
+
+    #[test]
+    fn fromstr_leading_double_colon() {
+        let s = Symbol::from_str("0002ea9e    0000001c T ::arbitrary::func");
+        assert!(s.is_ok());
+        let s = s.unwrap();
+        assert_eq!(s.addr, 0x0002ea9e);
+        assert_eq!(s.size, 0x0000001c);
+        assert_eq!(s.sym_type, SymbolType::TextSection);
+        assert_eq!(s.name, String::from("::arbitrary::func"));
+    }
+
+    #[test]
     fn fromstr_invalid_addr() {
         let s = Symbol::from_str("000K08700 00000064 T net_if_up");
         assert!(s.is_err());
@@ -343,6 +474,13 @@ mod symbol_tests {
     #[test]
     fn fromstr_missing_name() {
         let s = Symbol::from_str("00008700 00000064 T");
+        assert!(s.is_err());
+        assert_eq!(s.unwrap_err(), SymbolParseError(()));
+    }
+
+    #[test]
+    fn fromstr_too_many_type_chars() {
+        let s = Symbol::from_str("00008700 00000064 Tt net_if_up");
         assert!(s.is_err());
         assert_eq!(s.unwrap_err(), SymbolParseError(()));
     }
@@ -437,7 +575,18 @@ mod guesser_tests {
     fn new_vec_string() {
         let v = vec![String::from("bare-metal"), String::from("cstr_core")];
         let gsr = Guesser::new(v);
-        assert_eq!(gsr.packages, ["bare_metal", "cstr_core"]);
+        assert_eq!(
+            gsr.packages,
+            [
+                "bare_metal",
+                "cstr_core",
+                "std",
+                "core",
+                "proc_macro",
+                "alloc",
+                "test"
+            ]
+        );
         // let _ = v.len();  // v moved by "Guesser::new()"
     }
 
@@ -445,16 +594,38 @@ mod guesser_tests {
     fn new_slice_string() {
         let v = vec![String::from("bare-metal"), String::from("cstr_core")];
         let gsr = Guesser::new(&v[..]);
-        assert_eq!(gsr.packages, ["bare_metal", "cstr_core"]);
-        let _ = v.len();  // v still valid
+        assert_eq!(
+            gsr.packages,
+            [
+                "bare_metal",
+                "cstr_core",
+                "std",
+                "core",
+                "proc_macro",
+                "alloc",
+                "test"
+            ]
+        );
+        let _ = v.len(); // v still valid
     }
 
     #[test]
     fn new_slice_str() {
         let v = vec!["bare-metal", "cstr_core"];
         let gsr = Guesser::new(&v[..]);
-        assert_eq!(gsr.packages, ["bare_metal", "cstr_core"]);
-        let _ = v.len();  // v still valid
+        assert_eq!(
+            gsr.packages,
+            [
+                "bare_metal",
+                "cstr_core",
+                "std",
+                "core",
+                "proc_macro",
+                "alloc",
+                "test"
+            ]
+        );
+        let _ = v.len(); // v still valid
     }
 
     #[test]
@@ -463,8 +634,7 @@ mod guesser_tests {
         lock.push("./aux/Cargo.lock");
         let lock = lock.canonicalize().unwrap();
         let gsr = Guesser::from_lock(lock).unwrap();
-        assert_eq!(gsr.packages.len(), 19);
-        println!("{:?}", gsr.packages);
+        assert_eq!(gsr.packages.len(), 24);
         assert_eq!(
             gsr.packages,
             [
@@ -486,7 +656,12 @@ mod guesser_tests {
                 "vcell",
                 "void",
                 "volatile_register",
-                "zephyr_alloc"
+                "zephyr_alloc",
+                "std",
+                "core",
+                "proc_macro",
+                "alloc",
+                "test"
             ]
         );
     }
@@ -502,9 +677,16 @@ mod guesser_tests {
     #[test]
     fn guess_rust() {
         let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
-        let guess = gsr.guess(Symbol::from_str("0002e1d4 00000022 T _ZN9cstr_core7CString3new17hed72bf580cc06965E").unwrap(),
-            Symbol::from_str("0002e1d4 00000022 T cstr_core::CString::new").unwrap());
-        
+        let guess = gsr
+            .guess(
+                Symbol::from_str(
+                    "0002e1d4 00000022 T _ZN9cstr_core7CString3new17hed72bf580cc06965E",
+                )
+                .unwrap(),
+                Symbol::from_str("0002e1d4 00000022 T cstr_core::CString::new").unwrap(),
+            )
+            .unwrap();
+
         assert_eq!(guess.addr, 0x0002_e1d4);
         assert_eq!(guess.size, 0x0000_0022);
         assert_eq!(guess.sym_type, SymbolType::TextSection);
@@ -516,8 +698,8 @@ mod guesser_tests {
     fn guess_rust_generic_func() {
         let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
         let guess = gsr.guess(Symbol::from_str("0002ea9e 0000001c T _ZN4core3ptr39drop_in_place$LT$cstr_core..CString$GT$17h687c6bdfaf214436E").unwrap(),
-            Symbol::from_str("0002ea9e 0000001c T core::ptr::drop_in_place<cstr_core::CString>").unwrap());
-        
+            Symbol::from_str("0002ea9e 0000001c T core::ptr::drop_in_place<cstr_core::CString>").unwrap()).unwrap();
+
         assert_eq!(guess.addr, 0x0002_ea9e);
         assert_eq!(guess.size, 0x0000_001c);
         assert_eq!(guess.sym_type, SymbolType::TextSection);
@@ -529,20 +711,27 @@ mod guesser_tests {
     fn guess_rust_trait_impl() {
         let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
         let guess = gsr.guess(Symbol::from_str("0002eb78 00000022 t _ZN60_$LT$cstr_core..CString$u20$as$u20$core..ops..drop..Drop$GT$4drop17h462206ac2c399119E").unwrap(),
-            Symbol::from_str("0002eb78 00000022 t <cstr_core::CString as core::ops::drop::Drop>::drop").unwrap());
-        
+            Symbol::from_str("0002eb78 00000022 t <cstr_core::CString as core::ops::drop::Drop>::drop").unwrap()).unwrap();
+
         assert_eq!(guess.addr, 0x0002_eb78);
         assert_eq!(guess.size, 0x0000_0022);
         assert_eq!(guess.sym_type, SymbolType::TextSection);
-        assert_eq!(guess.name, "<cstr_core::CString as core::ops::drop::Drop>::drop");
+        assert_eq!(
+            guess.name,
+            "<cstr_core::CString as core::ops::drop::Drop>::drop"
+        );
         assert_eq!(guess.lang, SymbolLang::Rust);
     }
-    
+
     #[test]
     fn guess_cpp() {
         let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
-        let guess = gsr.guess(Symbol::from_str("0004462c 000002f4 R _ZN2ot3Cli11Interpreter9sCommandsE").unwrap(),
-            Symbol::from_str("0004462c 000002f4 R ot::Cli::Interpreter::sCommands").unwrap());
+        let guess = gsr
+            .guess(
+                Symbol::from_str("0004462c 000002f4 R _ZN2ot3Cli11Interpreter9sCommandsE").unwrap(),
+                Symbol::from_str("0004462c 000002f4 R ot::Cli::Interpreter::sCommands").unwrap(),
+            )
+            .unwrap();
         assert_eq!(guess.addr, 0x0004_462c);
         assert_eq!(guess.size, 0x0000_02f4);
         assert_eq!(guess.sym_type, SymbolType::ReadOnlyDataSection);
@@ -554,19 +743,26 @@ mod guesser_tests {
     fn guess_cpp_could_be_rust() {
         let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
         let guess = gsr.guess(Symbol::from_str("0001c36c 00000028 W _ZN2ot10LinkedListINS_15AddressResolver10CacheEntryEE3PopEv").unwrap(),
-            Symbol::from_str("0001c36c 00000028 W ot::LinkedList<ot::AddressResolver::CacheEntry>::Pop()").unwrap());
+            Symbol::from_str("0001c36c 00000028 W ot::LinkedList<ot::AddressResolver::CacheEntry>::Pop()").unwrap()).unwrap();
         assert_eq!(guess.addr, 0x0001_c36c);
         assert_eq!(guess.size, 0x0000_0028);
         assert_eq!(guess.sym_type, SymbolType::Weak);
-        assert_eq!(guess.name, "ot::LinkedList<ot::AddressResolver::CacheEntry>::Pop()");
+        assert_eq!(
+            guess.name,
+            "ot::LinkedList<ot::AddressResolver::CacheEntry>::Pop()"
+        );
         assert_eq!(guess.lang, SymbolLang::Cpp);
     }
 
     #[test]
     fn guess_c() {
         let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
-        let guess = gsr.guess(Symbol::from_str("00008700 00000064 T net_if_up").unwrap(),
-            Symbol::from_str("00008700 00000064 T net_if_up").unwrap());
+        let guess = gsr
+            .guess(
+                Symbol::from_str("00008700 00000064 T net_if_up").unwrap(),
+                Symbol::from_str("00008700 00000064 T net_if_up").unwrap(),
+            )
+            .unwrap();
         assert_eq!(guess.addr, 0x0000_8700);
         assert_eq!(guess.size, 0x0000_0064);
         assert_eq!(guess.sym_type, SymbolType::TextSection);
