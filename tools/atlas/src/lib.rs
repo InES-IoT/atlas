@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::io;
 use std::path::PathBuf;
-mod sym;
+pub mod sym;
 
 use std::process::Command;
 

@@ -39,18 +39,14 @@
 //! https://itanium-cxx-abi.github.io/cxx-abi/abi.html#mangling
 //!
 
-use cargo_lock::{Lockfile, Package};
-use cpp_demangle;
+use cargo_lock::Lockfile;
 use lazy_static::lazy_static;
 use regex::Regex;
-use rustc_demangle::try_demangle;
 use std::borrow::Cow;
-use std::borrow::ToOwned;
 use std::convert::From;
 use std::error::Error;
 use std::fmt;
-use std::fmt::{Debug, Display};
-use std::io;
+use std::fmt::Debug;
 use std::path::Path;
 use std::str::FromStr;
 use std::string::ToString;
@@ -633,53 +629,5 @@ mod guesser_tests {
         assert_eq!(guess.sym_type, SymbolType::TextSection);
         assert_eq!(guess.name, "net_if_up");
         assert_eq!(guess.lang, SymbolLang::C);
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn lulu() {
-        let arr = [
-            "_ZN4testE",
-            "_ZN3foo3barE",
-            "_ZN3foo17h05af221e174051e9E",
-            "net_if_up",
-            "_net_if_up",
-            "_ZN96_$LT$core..str..lossy..Utf8LossyChunksIter$u20$as$u20$core..iter..traits..iterator..Iterator$GT$4next17h263780449afa33f7E",
-            "<core::str::lossy::Utf8LossyChunksIter as core::iter::traits::iterator::Iterator>::next",
-            "_ZN2ot13MeshForwarder16PrepareDataFrameERNS_3Mac7TxFrameERNS_7MessageERKNS1_7AddressES8_bttb",
-            "ot::MeshForwarder::PrepareDataFrame(ot::Mac::TxFrame&, ot::Message&, ot::Mac::Address const&, ot::Mac::Address const&, bool, unsigned short, unsigned short, bool)",
-            "_ZN4core3fmt3num55_$LT$impl$u20$core..fmt..LowerHex$u20$for$u20$usize$GT$3fmt17hfae376f5993c24d7E",
-            "_ZN8secprint8KTimeout5sleep17h27c408da3a033351E",
-            "0002e9d6 00000028 T _ZN62_$LT$cstr_core..CString$u20$as$u20$core..ops..deref..Deref$GT$5deref17he28e8f9fe73ce0e4E"
-        ];
-
-        for s in arr {
-            println!(
-                "{} | Rust: {:?} | C++: {:?}\n",
-                s,
-                try_demangle(s),
-                match cpp_demangle::Symbol::new(s) {
-                    Ok(sym) => sym.to_string(),
-                    Err(_) => String::from("Error"),
-                }
-            );
-        }
-        // println!("{:?}", try_demangle("_ZN4testE"));
-        // println!("{:?}", try_demangle("_ZN3foo3barE"));
-        // println!("{:?}", try_demangle("_ZN3foo17h05af221e174051e9E"));
-        // println!("{:?}", try_demangle("net_if_up"));
-        // println!("{:?}", try_demangle("<core::str::lossy::Utf8LossyChunksIter as core::iter::traits::iterator::Iterator>::next"));
-        // println!("{:?}", try_demangle("ot::MeshForwarder::PrepareDataFrame(ot::Mac::TxFrame&, ot::Message&, ot::Mac::Address const&, ot::Mac::Address const&, bool, unsigned short, unsigned short, bool)"));
-    }
-
-    #[test]
-    fn hoho() {
-        // println!("{:?}", try_demangle("0002e9d6 00000028 T _ZN62_$LT$cstr_core..CString$u20$as$u20$core..ops..deref..Deref$GT$5deref17he28e8f9fe73ce0e4E").unwrap_err());
-        // println!("{:?}", try_demangle("00011e44 00000134 T _ZN41_$LT$char$u20$as$u20$core..fmt..Debug$GT$3fmt17h3c74589d8f06768cE").unwrap_err());
-        println!("{:?}", try_demangle("0000000000000000 0000000000000458 T _ZN96_$LT$core..str..lossy..Utf8LossyChunksIter$u20$as$u20$core..iter..traits..iterator..Iterator$GT$4next17h6ccbf8e9a731f461E").unwrap_err());
     }
 }
