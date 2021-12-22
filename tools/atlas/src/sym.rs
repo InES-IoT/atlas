@@ -48,6 +48,7 @@ use std::error::Error;
 use std::fmt;
 use std::fmt::Debug;
 use std::path::Path;
+use std::process::Command;
 use std::str::FromStr;
 use std::string::ToString;
 use syn;
@@ -177,13 +178,20 @@ pub struct SymbolGuess {
 
 const SYSROOT_CRATES: &[&'static str] = &["std", "core", "proc_macro", "alloc", "test"];
 
-#[derive(Debug)]
+// TODO:
+// Rewrite this struct with the builder pattern.
+#[derive(Debug, Default)]
 pub struct Guesser {
     packages: Vec<String>,
+    no_mangle: Vec<String>,
 }
 
 impl Guesser {
-    pub fn new<'a, T, U>(packages: T) -> Self
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn set_packages<'a, T, U>(&mut self, packages: T)
     where
         T: Into<Cow<'a, [U]>>,
         U: 'a + Clone + AsRef<str>,
@@ -197,10 +205,10 @@ impl Guesser {
 
         packages.extend(SYSROOT_CRATES.iter().map(|&s| String::from(s)));
 
-        Guesser { packages }
+        self.packages = packages;
     }
 
-    pub fn from_lock(lock: impl AsRef<Path>) -> Result<Self, SymbolParseError> {
+    pub fn from_lock(&mut self, lock: impl AsRef<Path>) -> Result<(), SymbolParseError> {
         let lockfile = Lockfile::load(lock).map_err(|_e| SymbolParseError(()))?;
 
         let mut packages = lockfile
@@ -210,8 +218,88 @@ impl Guesser {
             .collect::<Vec<String>>();
 
         packages.extend(SYSROOT_CRATES.iter().map(|&s| String::from(s)));
+        self.packages = packages;
+        Ok(())
+    }
 
-        Ok(Guesser { packages })
+    pub fn set_no_mangle<'a, T, U>(&mut self, no_mangle: T)
+    where
+        T: Into<Cow<'a, [U]>>,
+        U: 'a + Clone + AsRef<str>,
+    {
+        let no_mangle = no_mangle
+            .into()
+            .into_owned()
+            .into_iter()
+            .map(|p| p.as_ref().to_owned())
+            .collect::<Vec<String>>();
+
+        self.no_mangle = no_mangle;
+    }
+
+    pub fn from_lib<T, U>(&mut self, nm: T, lib: U) -> Result<(), SymbolParseError>
+    where
+        T: AsRef<str>,
+        U: AsRef<str>,
+    {
+        let mangled_out = Command::new(nm.as_ref())
+            .arg("--print-size")
+            .arg(lib.as_ref())
+            .output()
+            .map_err(|_e| SymbolParseError(()))?;
+
+        if !mangled_out.status.success() {
+            return Err(SymbolParseError(()));
+        }
+
+        let mangled_str =
+            std::str::from_utf8(&mangled_out.stdout).map_err(|_e| SymbolParseError(()))?;
+
+        let demangled_out = Command::new(nm.as_ref())
+            .arg("--print-size")
+            .arg("--demangle")
+            .arg(lib.as_ref())
+            .output()
+            .map_err(|_e| SymbolParseError(()))?;
+
+        if !demangled_out.status.success() {
+            return Err(SymbolParseError(()));
+        }
+
+        let demangled_str =
+            std::str::from_utf8(&demangled_out.stdout).map_err(|_e| SymbolParseError(()))?;
+
+        for (mangled, demangled) in mangled_str.lines().zip(demangled_str.lines()) {
+            let mangled = match Symbol::from_str(mangled) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+
+            let demangled = match Symbol::from_str(demangled) {
+                Ok(s) => s,
+                Err(_) => continue,
+            };
+
+            if mangled.name == demangled.name {
+                // TODO:
+                // Rewrite this using a simple regex and check the performance
+                // difference
+                let mut chars = mangled.name.chars();
+                if let Some(c) = chars.next() {
+                    if matches!(c, 'a'..='z' | 'A'..='Z' | '_') {
+                        if mangled
+                            .name
+                            .chars()
+                            .all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'))
+                        {
+                            self.no_mangle.push(mangled.name);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     pub fn guess<T>(&self, mangled: T, demangled: T) -> Result<SymbolGuess, SymbolParseError>
@@ -238,13 +326,25 @@ impl Guesser {
         }
 
         if mangled.name == demangled.name {
-            return Ok(SymbolGuess {
-                addr: mangled.addr,
-                size: mangled.size,
-                sym_type: mangled.sym_type,
-                name: mangled.name,
-                lang: SymbolLang::C,
-            });
+            // TODO:
+            // See documentation: should "any" be used here instead of &String?
+            if self.no_mangle.contains(&mangled.name) {
+                return Ok(SymbolGuess {
+                    addr: mangled.addr,
+                    size: mangled.size,
+                    sym_type: mangled.sym_type,
+                    name: mangled.name,
+                    lang: SymbolLang::Rust,
+                });
+            } else {
+                return Ok(SymbolGuess {
+                    addr: mangled.addr,
+                    size: mangled.size,
+                    sym_type: mangled.sym_type,
+                    name: mangled.name,
+                    lang: SymbolLang::C,
+                });
+            }
         }
 
         let path = syn::parse_str::<syn::TypePath>(&demangled.name);
@@ -275,6 +375,8 @@ impl Guesser {
             _ => return Err(SymbolParseError(())),
         };
 
+        // TODO:
+        // See documentation: should "any" be used here instead of &String?
         if self.packages.contains(&first_ident) {
             Ok(SymbolGuess {
                 addr: demangled.addr,
@@ -295,6 +397,9 @@ impl Guesser {
     }
 }
 
+// TODO:
+// Rewrite this as a generic atlas error and implement an ErrorKind enum for
+// specifying the type of error (including an error message).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SymbolParseError(());
 
@@ -464,8 +569,14 @@ mod guesser_tests {
 
     #[test]
     fn new_vec_string() {
-        let v = vec![String::from("bare-metal"), String::from("cstr_core")];
-        let gsr = Guesser::new(v);
+        let p = vec![String::from("bare-metal"), String::from("cstr_core")];
+        let n = vec![
+            String::from("some_no_mangle"),
+            String::from("another_no_mangle"),
+        ];
+        let mut gsr = Guesser::new();
+        gsr.set_packages(p);
+        gsr.set_no_mangle(n);
         assert_eq!(
             gsr.packages,
             [
@@ -478,13 +589,20 @@ mod guesser_tests {
                 "test"
             ]
         );
+        assert_eq!(gsr.no_mangle, ["some_no_mangle", "another_no_mangle"]);
         // let _ = v.len();  // v moved by "Guesser::new()"
     }
 
     #[test]
     fn new_slice_string() {
-        let v = vec![String::from("bare-metal"), String::from("cstr_core")];
-        let gsr = Guesser::new(&v[..]);
+        let p = vec![String::from("bare-metal"), String::from("cstr_core")];
+        let n = vec![
+            String::from("some_no_mangle"),
+            String::from("another_no_mangle"),
+        ];
+        let mut gsr = Guesser::new();
+        gsr.set_packages(&p[..]);
+        gsr.set_no_mangle(&n[..]);
         assert_eq!(
             gsr.packages,
             [
@@ -497,13 +615,16 @@ mod guesser_tests {
                 "test"
             ]
         );
-        let _ = v.len(); // v still valid
+        let _ = p.len(); // p still valid
     }
 
     #[test]
     fn new_slice_str() {
-        let v = vec!["bare-metal", "cstr_core"];
-        let gsr = Guesser::new(&v[..]);
+        let p = vec!["bare-metal", "cstr_core"];
+        let n = vec!["some_no_mangle", "another_no_mangle"];
+        let mut gsr = Guesser::new();
+        gsr.set_packages(&p[..]);
+        gsr.set_no_mangle(&n[..]);
         assert_eq!(
             gsr.packages,
             [
@@ -516,7 +637,7 @@ mod guesser_tests {
                 "test"
             ]
         );
-        let _ = v.len(); // v still valid
+        let _ = p.len(); // p still valid
     }
 
     #[test]
@@ -524,7 +645,8 @@ mod guesser_tests {
         let mut lock = std::env::current_dir().unwrap();
         lock.push("./aux/Cargo.lock");
         let lock = lock.canonicalize().unwrap();
-        let gsr = Guesser::from_lock(lock).unwrap();
+        let mut gsr = Guesser::new();
+        gsr.from_lock(lock).unwrap();
         assert_eq!(gsr.packages.len(), 24);
         assert_eq!(
             gsr.packages,
@@ -562,12 +684,108 @@ mod guesser_tests {
         let mut lock = std::env::current_dir().unwrap();
         lock.push("./aux/rust_minimal_node.elf");
         let lock = lock.canonicalize().unwrap();
-        assert!(Guesser::from_lock(lock).is_err());
+        let mut gsr = Guesser::new();
+        assert!(gsr.from_lock(lock).is_err());
+    }
+
+    #[test]
+    fn from_lib() {
+        let mut lib = std::env::current_dir().unwrap();
+        lib.push("./aux/libsecprint.a");
+        let lib = lib.canonicalize().unwrap();
+        let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
+        let mut gsr = Guesser::new();
+        gsr.from_lib(nm, lib.to_str().unwrap()).unwrap();
+
+        assert_eq!(gsr.no_mangle.len(), 291);
+        assert!(gsr.no_mangle.contains(&String::from("rust_main")));
+        // Some mangled symbol that should have been filtered out
+        assert!(!gsr.no_mangle.contains(&String::from(
+            "_ZN4core7unicode12unicode_data1n7OFFSETS17hc40d3e150216ec3bE"
+        )));
+        // Some non-mangled symbol but is not a valid C identifier
+        assert!(!gsr.no_mangle.contains(&String::from(".L__unnamed_1")));
+    }
+
+    #[test]
+    fn from_lock_from_lib() {
+        let mut lock = std::env::current_dir().unwrap();
+        lock.push("./aux/Cargo.lock");
+        let mut lock = lock.canonicalize().unwrap();
+        let mut gsr = Guesser::new();
+        gsr.from_lock(&lock).unwrap();
+        lock.pop();
+        lock.push("./libsecprint.a");
+        let lib = lock.canonicalize().unwrap();
+        let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
+        gsr.from_lib(nm, lib.to_str().unwrap()).unwrap();
+        assert_eq!(gsr.packages.len(), 24);
+        assert_eq!(
+            gsr.packages,
+            [
+                "bare_metal",
+                "bitfield",
+                "cfg_if",
+                "cortex_m",
+                "cstr_core",
+                "cty",
+                "embedded_hal",
+                "memchr",
+                "nb",
+                "nb",
+                "panic_halt",
+                "rustc_version",
+                "secprint",
+                "semver",
+                "semver_parser",
+                "vcell",
+                "void",
+                "volatile_register",
+                "zephyr_alloc",
+                "std",
+                "core",
+                "proc_macro",
+                "alloc",
+                "test"
+            ]
+        );
+        assert_eq!(gsr.no_mangle.len(), 291);
+        assert!(gsr.no_mangle.contains(&String::from("rust_main")));
+        // Some mangled symbol that should have been filtered out
+        assert!(!gsr.no_mangle.contains(&String::from(
+            "_ZN4core7unicode12unicode_data1n7OFFSETS17hc40d3e150216ec3bE"
+        )));
+        // Some non-mangled symbol but is not a valid C identifier
+        assert!(!gsr.no_mangle.contains(&String::from(".L__unnamed_1")));
+    }
+    
+    #[test]
+    fn from_lock_permission_denied() {
+        let mut gsr = Guesser::new();
+        assert!(gsr.from_lock("/etc/shadow").is_err());
+    }
+
+    #[test]
+    fn from_lib_bad_nm_path() {
+        let mut lib = std::env::current_dir().unwrap();
+        lib.push("./aux/libsecprint.a");
+        let lib = lib.canonicalize().unwrap();
+        let mut gsr = Guesser::new();
+        assert!(gsr.from_lib("/bad/path", lib.to_str().unwrap()).is_err());
+    }
+
+    #[test]
+    fn from_lib_permission_denied() {
+        let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
+        let mut gsr = Guesser::new();
+        assert!(gsr.from_lib(nm, "/etc/shadow").is_err());
     }
 
     #[test]
     fn guess_rust_from_symbols() {
-        let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
+        let mut gsr = Guesser::new();
+        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
+        gsr.set_no_mangle(&["some_no_mangle"][..]);
         let guess = gsr
             .guess(
                 Symbol::from_str(
@@ -587,7 +805,9 @@ mod guesser_tests {
 
     #[test]
     fn guess_rust_from_str() {
-        let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
+        let mut gsr = Guesser::new();
+        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
+        gsr.set_no_mangle(&["some_no_mangle"][..]);
         let guess = gsr
             .guess(
                 "0002e1d4 00000022 T _ZN9cstr_core7CString3new17hed72bf580cc06965E",
@@ -604,7 +824,9 @@ mod guesser_tests {
 
     #[test]
     fn guess_rust_generic_func() {
-        let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
+        let mut gsr = Guesser::new();
+        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
+        gsr.set_no_mangle(&["some_no_mangle"][..]);
         let guess = gsr
             .guess(
                 "0002ea9e 0000001c T _ZN4core3ptr39drop_in_place$LT$cstr_core..CString$GT$17h687c6bdfaf214436E",
@@ -620,7 +842,9 @@ mod guesser_tests {
 
     #[test]
     fn guess_rust_trait_impl() {
-        let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
+        let mut gsr = Guesser::new();
+        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
+        gsr.set_no_mangle(&["some_no_mangle"][..]);
         let guess = gsr
             .guess(
                 "0002eb78 00000022 t _ZN60_$LT$cstr_core..CString$u20$as$u20$core..ops..drop..Drop$GT$4drop17h462206ac2c399119E",
@@ -639,7 +863,9 @@ mod guesser_tests {
 
     #[test]
     fn guess_cpp() {
-        let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
+        let mut gsr = Guesser::new();
+        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
+        gsr.set_no_mangle(&["some_no_mangle"][..]);
         let guess = gsr
             .guess(
                 "0004462c 000002f4 R _ZN2ot3Cli11Interpreter9sCommandsE",
@@ -655,7 +881,9 @@ mod guesser_tests {
 
     #[test]
     fn guess_cpp_could_be_rust() {
-        let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
+        let mut gsr = Guesser::new();
+        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
+        gsr.set_no_mangle(&["some_no_mangle"][..]);
         let guess = gsr
             .guess(
                 "0001c36c 00000028 W _ZN2ot10LinkedListINS_15AddressResolver10CacheEntryEE3PopEv",
@@ -674,7 +902,9 @@ mod guesser_tests {
 
     #[test]
     fn guess_c() {
-        let gsr = Guesser::new(&["bare-metal", "cstr_core"][..]);
+        let mut gsr = Guesser::new();
+        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
+        gsr.set_no_mangle(&["some_no_mangle"][..]);
         let guess = gsr
             .guess(
                 "00008700 00000064 T net_if_up",
@@ -686,5 +916,23 @@ mod guesser_tests {
         assert_eq!(guess.sym_type, SymbolType::TextSection);
         assert_eq!(guess.name, "net_if_up");
         assert_eq!(guess.lang, SymbolLang::C);
+    }
+
+    #[test]
+    fn guess_rust_no_mangle() {
+        let mut gsr = Guesser::new();
+        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
+        gsr.set_no_mangle(&["some_no_mangle", "net_if_up", "another"][..]);
+        let guess = gsr
+            .guess(
+                "00008700 00000064 T net_if_up",
+                "00008700 00000064 T net_if_up",
+            )
+            .unwrap();
+        assert_eq!(guess.addr, 0x0000_8700);
+        assert_eq!(guess.size, 0x0000_0064);
+        assert_eq!(guess.sym_type, SymbolType::TextSection);
+        assert_eq!(guess.name, "net_if_up");
+        assert_eq!(guess.lang, SymbolLang::Rust);
     }
 }
