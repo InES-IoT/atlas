@@ -36,7 +36,7 @@ impl Atlas {
         let _ = File::open(&lock)?;
         let _ = File::open(&lib)?;
 
-    Ok(Atlas { nm, elf, lock, lib, syms: Vec::new(), fails: Vec::new() })
+        Ok(Atlas { nm, elf, lock, lib, syms: Vec::new(), fails: Vec::new() })
     }
 
     pub fn analyze(&mut self) -> io::Result<()> {
@@ -156,6 +156,7 @@ mod tests {
         assert!(at.analyze().is_ok());
         println!("{}", at.syms.len());
         println!("{}", at.fails.len());
+        println!("{:#?}", at.fails);
 
         // println!("{:#?}",at.syms);
     }
