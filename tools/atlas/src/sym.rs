@@ -111,7 +111,7 @@ impl FromStr for Symbol {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         lazy_static! {
             static ref RE: Regex =
-                Regex::new(r"^\s*([0-9a-fA-F]{8})\s+([0-9a-fA-F]{8})\s+(\S)\s+(\S.*\S)\s*$")
+                Regex::new(r"^\s*([0-9a-fA-F]{8})\s+([0-9a-fA-F]{8})\s+(\S)\s+(.*?)\s*$")
                     .unwrap();
         }
 
@@ -567,6 +567,17 @@ mod symbol_tests {
         assert_eq!(s.size, 0x0000001c);
         assert_eq!(s.sym_type, SymbolType::TextSection);
         assert_eq!(s.name, String::from("::arbitrary::func"));
+    }
+
+    #[test]
+    fn fromstr_single_char_as_name() {
+        let s = Symbol::from_str("20001370 00000010 b s");
+        assert!(s.is_ok());
+        let s = s.unwrap();
+        assert_eq!(s.addr, 0x20001370);
+        assert_eq!(s.size, 0x00000010);
+        assert_eq!(s.sym_type, SymbolType::BssSection);
+        assert_eq!(s.name, String::from("s"));
     }
 
     #[test]
