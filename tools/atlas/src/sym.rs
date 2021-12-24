@@ -239,8 +239,8 @@ impl Guesser {
 
     pub fn from_lib<T, U>(&mut self, nm: T, lib: U) -> Result<(), SymbolParseError>
     where
-        T: AsRef<str>,
-        U: AsRef<str>,
+        T: AsRef<Path>,
+        U: AsRef<Path>,
     {
         let mangled_out = Command::new(nm.as_ref())
             .arg("--print-size")
@@ -695,7 +695,7 @@ mod guesser_tests {
         let lib = lib.canonicalize().unwrap();
         let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
         let mut gsr = Guesser::new();
-        gsr.from_lib(nm, lib.to_str().unwrap()).unwrap();
+        gsr.from_lib(nm, lib).unwrap();
 
         assert_eq!(gsr.no_mangle.len(), 291);
         assert!(gsr.no_mangle.contains(&String::from("rust_main")));
@@ -718,7 +718,7 @@ mod guesser_tests {
         lock.push("./libsecprint.a");
         let lib = lock.canonicalize().unwrap();
         let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
-        gsr.from_lib(nm, lib.to_str().unwrap()).unwrap();
+        gsr.from_lib(nm, lib).unwrap();
         assert_eq!(gsr.packages.len(), 24);
         assert_eq!(
             gsr.packages,
@@ -771,7 +771,7 @@ mod guesser_tests {
         lib.push("./aux/libsecprint.a");
         let lib = lib.canonicalize().unwrap();
         let mut gsr = Guesser::new();
-        assert!(gsr.from_lib("/bad/path", lib.to_str().unwrap()).is_err());
+        assert!(gsr.from_lib("/bad/path", lib).is_err());
     }
 
     #[test]
