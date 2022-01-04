@@ -51,6 +51,8 @@ use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
 use std::string::ToString;
+use symbolic::common::{Language, Name, NameMangling};
+use symbolic::demangle::{Demangle, DemangleOptions};
 use syn;
 
 #[derive(PartialEq, Debug)]
@@ -163,8 +165,10 @@ impl TryFrom<&str> for Symbol {
 pub enum SymbolLang {
     Unknown,
     Rust,
+    MaybeRust,
     C,
     Cpp,
+    MaybeCpp
 }
 
 #[derive(Debug)]
@@ -176,7 +180,7 @@ pub struct SymbolGuess {
     pub lang: SymbolLang,
 }
 
-const SYSROOT_CRATES: &[&'static str] = &["std", "core", "proc_macro", "alloc", "test"];
+const SYSROOT_CRATES: &[&'static str] = &["std", "core", "proc_macro", "alloc", "test", "compiler_builtins"];
 
 // TODO:
 // Rewrite this struct with the builder pattern.
@@ -325,128 +329,167 @@ impl Guesser {
             return Err(SymbolParseError(()));
         }
 
-        if mangled.name == demangled.name {
+        // Create struct here because it would otherwise need to be created at
+        // all of the following return statements down there. Only drawback is
+        // that the `demangled.name` String is needed while determining the
+        // language but it has obviously already been moved into this struct.
+        let mut guess = SymbolGuess {
+            addr: demangled.addr,
+            size: demangled.size,
+            sym_type: demangled.sym_type,
+            name: demangled.name,
+            lang: SymbolLang::Unknown,
+        };
+
+        if mangled.name == guess.name {
             // TODO:
             // See documentation: should "any" be used here instead of &String?
             if self.no_mangle.contains(&mangled.name) {
-                return Ok(SymbolGuess {
-                    addr: mangled.addr,
-                    size: mangled.size,
-                    sym_type: mangled.sym_type,
-                    name: mangled.name,
-                    lang: SymbolLang::Rust,
-                });
+                guess.lang = SymbolLang::Rust;
+                return Ok(guess);
             } else {
-                return Ok(SymbolGuess {
-                    addr: mangled.addr,
-                    size: mangled.size,
-                    sym_type: mangled.sym_type,
-                    name: mangled.name,
-                    lang: SymbolLang::C,
-                });
+                guess.lang = SymbolLang::C;
+                return Ok(guess);
             }
         }
 
-        let full_path = syn::parse_str::<syn::TypePath>(&demangled.name);
-        // dbg!(&full_path);
-        if full_path.is_err() {
-            return Ok(SymbolGuess {
-                addr: demangled.addr,
-                size: demangled.size,
-                sym_type: demangled.sym_type,
-                name: demangled.name,
-                lang: SymbolLang::Cpp,
-            });
-        }
+        // Demangle the mangled symbols using the symbolic package. Once with
+        // the Rust preset and once with Cpp. The automatic detection cannot be
+        // used as it tries Rust first and immediately returns even if the
+        // symbol could also be valid Cpp.
+        let mut name = Name::new(&mangled.name,NameMangling::Mangled, Language::Rust);
+        let rust_demangled = name.demangle(DemangleOptions::complete());
+        name.set_language(Language::Cpp);
+        let cpp_demangled = name.demangle(DemangleOptions::complete());
+        let rust_demangled = rust_demangled.filter(|s| s==&guess.name);
+        let cpp_demangled = cpp_demangled.filter(|s| s==&guess.name);
 
-        let full_path = full_path.unwrap();
-        // dbg!(&full_path);
+        // Parse the demangled (by the nm tool) symbol name as a Rust type path.
+        // This will later allow to check if there is an `as` keyword within
+        // angled brackets which would be a clear sign for a Rust symbol. Also,
+        // it allows the extraction of the first identifier in the path which
+        // would be present in self.packages if it is a Rust symbol.
+        let full_path = syn::parse_str::<syn::TypePath>(&guess.name);
 
-        // TODO:
-        // This needs to be refactored into multiple private functions as much
-        // of this will be needed many more times. E.g. extracting the first
-        // identifier (here twice and probably when wanting to filter by crate).
-        if full_path.qself.is_some() {
-            let qself = full_path.qself.unwrap();
-            match qself.as_token {
-                Some(_) => {
-                    return Ok(SymbolGuess {
-                        addr: demangled.addr,
-                        size: demangled.size,
-                        sym_type: demangled.sym_type,
-                        name: demangled.name,
-                        lang: SymbolLang::Rust,
-                    });
-                },
-                None => {
-                    let mut type_enum = *qself.ty;
+        // dbg!(&rust_demangled);
+        // dbg!(&cpp_demangled);
 
-                    let path = loop {
-                        match type_enum {
-                            syn::Type::Path(qself_path) => break qself_path.path,
-                            syn::Type::Reference(type_ref) => type_enum = *type_ref.elem,
-                            syn::Type::Ptr(type_ptr) => type_enum = *type_ptr.elem,
-                            _ => return Err(SymbolParseError(())),
-                        }
-                    };
-
-                    let first_ident = match path.segments.first() {
-                        Some(path_seg) => (*path_seg).ident.to_string(),
-                        _ => return Err(SymbolParseError(())),
-                    };
-                    
-                    // TODO:
-                    // See documentation: should "any" be used here instead of &String?
-                    if self.packages.contains(&first_ident) {
-                        Ok(SymbolGuess {
-                            addr: demangled.addr,
-                            size: demangled.size,
-                            sym_type: demangled.sym_type,
-                            name: demangled.name,
-                            lang: SymbolLang::Rust,
-                        })
-                    } else {
-                        // println!("wow! cpp that could be rust!");
-                        // println!("{}", &demangled.name);
-                        Ok(SymbolGuess {
-                            addr: demangled.addr,
-                            size: demangled.size,
-                            sym_type: demangled.sym_type,
-                            name: demangled.name,
-                            lang: SymbolLang::Cpp,
-                        })
-                    }
-                    
+        match (&full_path, rust_demangled, cpp_demangled) {
+            (Err(_), None, None) => {
+                println!("Cannot parse or demangle symbol");
+                println!("{:?}", &guess);
+                return Err(SymbolParseError(()));
+            },
+            (Err(_), None, Some(_)) => {
+                guess.lang = SymbolLang::Cpp;
+                return Ok(guess);
+            },
+            (Err(_), Some(_), None) => {
+                // println!("Can demangle symbol as Rust but not parse the type path");
+                // println!("{:?}", &guess);
+                return Err(SymbolParseError(()));
+            },
+            (Err(_), Some(_), Some(_)) => {
+                println!("Can demangle symbol as Rust and Cpp but not parse as a Rust type path");
+                println!("Probably Cpp...");
+                guess.lang = SymbolLang::MaybeCpp;
+                println!("{:?}", &guess);
+                return Ok(guess);
+            },
+            (Ok(full_path), None, None) => {
+                // println!("Cannot demangle but CAN parse Rust type path");
+                let as_keyword = Guesser::qself_with_as(&full_path);
+                let first_ident_in_packages = self.first_ident_in_packages(&full_path)?;
+                if as_keyword || first_ident_in_packages {
+                    guess.lang = SymbolLang::Rust;
+                } else {
+                    guess.lang = SymbolLang::MaybeRust;
                 }
-            }
-        } else {
-            let first_ident = match full_path.path.segments.first() {
-                Some(path_seg) => (*path_seg).ident.to_string(),
-                _ => return Err(SymbolParseError(())),
-            };
-            
-            // TODO:
-            // See documentation: should "any" be used here instead of &String?
-            if self.packages.contains(&first_ident) {
-                Ok(SymbolGuess {
-                    addr: demangled.addr,
-                    size: demangled.size,
-                    sym_type: demangled.sym_type,
-                    name: demangled.name,
-                    lang: SymbolLang::Rust,
-                })
-            } else {
-                // println!("wow! cpp that could be rust!");
-                // println!("{}", &demangled.name);
-                Ok(SymbolGuess {
-                    addr: demangled.addr,
-                    size: demangled.size,
-                    sym_type: demangled.sym_type,
-                    name: demangled.name,
-                    lang: SymbolLang::Cpp,
-                })
-            }
+                // This might be unwanted...
+                if !first_ident_in_packages {
+                    println!("Symbol is (maybe) Rust but first ident not in packages!");
+                    println!("{:?}", &guess);
+                }
+                return Ok(guess);
+            },
+            (Ok(full_path), None, Some(_)) => {
+                // println!("Can demangle as Cpp and can parse Rust type path");
+                let as_keyword = Guesser::qself_with_as(&full_path);
+                if as_keyword {
+                    println!("Found \"as\" keyword in Cpp symbol");
+                    return Err(SymbolParseError(()));
+                }
+                guess.lang = SymbolLang::Cpp;
+                // println!("{:?}", &guess);
+                return Ok(guess);
+            },
+            (Ok(full_path), Some(_), None) => {
+                // println!("Can demangle as Rust and can parse Rust type path");
+                let first_ident_in_packages = self.first_ident_in_packages(&full_path)?;
+                if !first_ident_in_packages {
+                    println!("Rust symbol but first ident not in packages!");
+                    println!("{:?}", &guess);
+                }
+                guess.lang = SymbolLang::Rust;
+                return Ok(guess);
+            },
+            (Ok(full_path), Some(_), Some(_)) => {
+                // println!("Can demangle as Rust and Cpp and can parse Rust type path");
+                let as_keyword = Guesser::qself_with_as(&full_path);
+                let first_ident_in_packages = self.first_ident_in_packages(&full_path)?;
+                if as_keyword || first_ident_in_packages {
+                    guess.lang = SymbolLang::Rust;
+                } else {
+                    guess.lang = SymbolLang::Cpp;
+                }
+                // println!("{:?}", &guess);
+                return Ok(guess);
+            },
         }
+    }
+
+    fn get_first_ident(full_path: &syn::TypePath) -> Option<String> {
+        let path = match full_path.qself {
+            Some(ref qself) => {
+                // `full_path` contains an explicit Self type.
+                // E.g. `<cstr_core::CString as core::ops::drop::Drop>::drop`
+                // 
+                // The explicit Self type could be behind one or more
+                // references/pointers. Loop over the `Box<Type>` until a
+                // `Type::Path` is found.
+                let mut type_enum = &*qself.ty;
+                loop {
+                    match type_enum {
+                        syn::Type::Path(qself_path) => break &qself_path.path,
+                        syn::Type::Reference(type_ref) => type_enum = &*type_ref.elem,
+                        syn::Type::Ptr(type_ptr) => type_enum = &*type_ptr.elem,
+                        _ => return None,
+                    }
+                }
+            },
+            None => {
+                // `full_path` does not contain an explicit Self type.
+                // E.g.: `cstr_core::CString::new`
+                &full_path.path
+            },
+        };
+
+        match path.segments.first() {
+            Some(path_seg) => Some((*path_seg).ident.to_string()),
+            _ => None,
+        }
+    }
+
+    fn qself_with_as(full_path: &syn::TypePath) -> bool {
+        match full_path.qself.as_ref().and_then(|_| full_path.qself.as_ref().unwrap().as_token) {
+            Some(_) => true,
+            None => false,
+        }
+    }
+
+    fn first_ident_in_packages(&self, full_path: &syn::TypePath) -> Result<bool, SymbolParseError> {
+        let first_ident = Guesser::get_first_ident(full_path).ok_or(SymbolParseError(()))?;
+        Ok(self.packages.contains(&first_ident)) 
     }
 }
 
@@ -650,7 +693,8 @@ mod guesser_tests {
                 "core",
                 "proc_macro",
                 "alloc",
-                "test"
+                "test",
+                "compiler_builtins"
             ]
         );
         assert_eq!(gsr.no_mangle, ["some_no_mangle", "another_no_mangle"]);
@@ -676,7 +720,8 @@ mod guesser_tests {
                 "core",
                 "proc_macro",
                 "alloc",
-                "test"
+                "test",
+                "compiler_builtins"
             ]
         );
         let _ = p.len(); // p still valid
@@ -698,7 +743,8 @@ mod guesser_tests {
                 "core",
                 "proc_macro",
                 "alloc",
-                "test"
+                "test",
+                "compiler_builtins"
             ]
         );
         let _ = p.len(); // p still valid
@@ -711,7 +757,7 @@ mod guesser_tests {
         let lock = lock.canonicalize().unwrap();
         let mut gsr = Guesser::new();
         gsr.from_lock(lock).unwrap();
-        assert_eq!(gsr.packages.len(), 24);
+        assert_eq!(gsr.packages.len(), 25);
         assert_eq!(
             gsr.packages,
             [
@@ -738,7 +784,8 @@ mod guesser_tests {
                 "core",
                 "proc_macro",
                 "alloc",
-                "test"
+                "test",
+                "compiler_builtins"
             ]
         );
     }
@@ -783,7 +830,7 @@ mod guesser_tests {
         let lib = lock.canonicalize().unwrap();
         let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
         gsr.from_lib(nm, lib).unwrap();
-        assert_eq!(gsr.packages.len(), 24);
+        assert_eq!(gsr.packages.len(), 25);
         assert_eq!(
             gsr.packages,
             [
@@ -810,7 +857,8 @@ mod guesser_tests {
                 "core",
                 "proc_macro",
                 "alloc",
-                "test"
+                "test",
+                "compiler_builtins"
             ]
         );
         assert_eq!(gsr.no_mangle.len(), 291);
@@ -991,6 +1039,48 @@ mod guesser_tests {
         );
         assert_eq!(guess.lang, SymbolLang::Rust);
     }
+    
+    #[test]
+    fn guess_rust_trait_impl_generic_ptr() {
+        let mut gsr = Guesser::new();
+        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
+        gsr.set_no_mangle(&["some_no_mangle"][..]);
+        let guess = gsr
+            .guess(
+                "0002eda6 000000a6 T _ZN54_$LT$$BP$const$u20$T$u20$as$u20$core..fmt..Pointer$GT$3fmt17hde7d70127d765717E",
+                "0002eda6 000000a6 T <*const T as core::fmt::Pointer>::fmt"
+            ).unwrap();
+
+        assert_eq!(guess.addr, 0x0002eda6);
+        assert_eq!(guess.size, 0x000000a6);
+        assert_eq!(guess.sym_type, SymbolType::TextSection);
+        assert_eq!(
+            guess.name,
+            "<*const T as core::fmt::Pointer>::fmt"
+        );
+        assert_eq!(guess.lang, SymbolLang::Rust);
+    }
+
+    // #[test]
+    // fn guess_rust_trait_impl_weird_generic() {
+    //     let mut gsr = Guesser::new();
+    //     gsr.set_packages(&["bare-metal", "cstr_core"][..]);
+    //     gsr.set_no_mangle(&["some_no_mangle"][..]);
+    //     let guess = gsr
+    //         .guess(
+    //             "0002ece2 00000022 T _ZN4core3ptr77_$LT$impl$u20$core..fmt..Pointer$u20$for$u20$fn$LP$$RP$$u20$.$GT$$u20$Ret$GT$3fmt17h8b264a36c1e2f9a7E",
+    //             "0002ece2 00000022 T core::ptr::<impl core::fmt::Pointer for fn() -> Ret>::fmt"
+    //         ).unwrap();
+
+    //     assert_eq!(guess.addr, 0x0002ece2);
+    //     assert_eq!(guess.size, 0x00000022);
+    //     assert_eq!(guess.sym_type, SymbolType::TextSection);
+    //     assert_eq!(
+    //         guess.name,
+    //         "core::ptr::<impl core::fmt::Pointer for fn() -> Ret>::fmt"
+    //     );
+    //     assert_eq!(guess.lang, SymbolLang::Rust);
+    // }
 
     #[test]
     fn guess_rust_trait_impl_no_as() {
@@ -1001,16 +1091,17 @@ mod guesser_tests {
             .guess(
                 "0002eda6 000000a6 T _lksjdflkjsflkjsdfl",
                 "0002eda6 000000a6 T <*const cstr_core::CString core::fmt::Pointer>::fmt"
-            ).unwrap();
+            );
+        assert!(guess.is_err());
 
-        assert_eq!(guess.addr, 0x0002eda6);
-        assert_eq!(guess.size, 0x000000a6);
-        assert_eq!(guess.sym_type, SymbolType::TextSection);
-        assert_eq!(
-            guess.name,
-            "<*const cstr_core::CString core::fmt::Pointer>::fmt"
-        );
-        assert_eq!(guess.lang, SymbolLang::Cpp);
+        // assert_eq!(guess.addr, 0x0002eda6);
+        // assert_eq!(guess.size, 0x000000a6);
+        // assert_eq!(guess.sym_type, SymbolType::TextSection);
+        // assert_eq!(
+        //     guess.name,
+        //     "<*const cstr_core::CString core::fmt::Pointer>::fmt"
+        // );
+        // assert_eq!(guess.lang, SymbolLang::Cpp);
     }
  
     #[test]
@@ -1047,18 +1138,18 @@ mod guesser_tests {
     #[test]
     fn guess_cpp() {
         let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
+        gsr.set_packages(&["bare-metal", "cstr_core", "ot"][..]);
         gsr.set_no_mangle(&["some_no_mangle"][..]);
         let guess = gsr
             .guess(
-                "0004462c 000002f4 R _ZN2ot3Cli11Interpreter9sCommandsE",
-                "0004462c 000002f4 R ot::Cli::Interpreter::sCommands",
+                "0003a26c 00000010 W _ZN2ot10LinkedListINS_15AddressResolver10CacheEntryEE4PushERS2_",
+                "0003a26c 00000010 W ot::LinkedList<ot::AddressResolver::CacheEntry>::Push(ot::AddressResolver::CacheEntry&)",
             )
             .unwrap();
-        assert_eq!(guess.addr, 0x0004_462c);
-        assert_eq!(guess.size, 0x0000_02f4);
-        assert_eq!(guess.sym_type, SymbolType::ReadOnlyDataSection);
-        assert_eq!(guess.name, "ot::Cli::Interpreter::sCommands");
+        assert_eq!(guess.addr, 0x0003_a26c);
+        assert_eq!(guess.size, 0x0000_0010);
+        assert_eq!(guess.sym_type, SymbolType::Weak);
+        assert_eq!(guess.name, "ot::LinkedList<ot::AddressResolver::CacheEntry>::Push(ot::AddressResolver::CacheEntry&)");
         assert_eq!(guess.lang, SymbolLang::Cpp);
     }
 
@@ -1117,6 +1208,49 @@ mod guesser_tests {
         assert_eq!(guess.sym_type, SymbolType::TextSection);
         assert_eq!(guess.name, "net_if_up");
         assert_eq!(guess.lang, SymbolLang::Rust);
+    }
+
+    #[test]
+    fn first_ident() {
+        let full_path = syn::parse_str::<syn::TypePath>("cstr_core::CString::new").unwrap();
+        let first_ident = Guesser::get_first_ident(&full_path).unwrap();
+        assert_eq!(first_ident, "cstr_core");
+    }
+    #[test]
+    fn first_ident_generic_func() {
+        let full_path = syn::parse_str::<syn::TypePath>("core::ptr::drop_in_place<cstr_core::CString>").unwrap();
+        let first_ident = Guesser::get_first_ident(&full_path).unwrap();
+        assert_eq!(first_ident, "core");
+    }
+    #[test]
+    fn first_ident_trait_impl() {
+        let full_path = syn::parse_str::<syn::TypePath>("<cstr_core::CString as core::ops::drop::Drop>::drop").unwrap();
+        let first_ident = Guesser::get_first_ident(&full_path).unwrap();
+        assert_eq!(first_ident, "cstr_core");
+    }
+    #[test]
+    fn first_ident_trait_impl_mutref() {
+        let full_path = syn::parse_str::<syn::TypePath>("<&mut cstr_core::CString as core::fmt::Write>::write_str").unwrap();
+        let first_ident = Guesser::get_first_ident(&full_path).unwrap();
+        assert_eq!(first_ident, "cstr_core");
+    }
+    #[test]
+    fn first_ident_trait_impl_double_ref() {
+        let full_path = syn::parse_str::<syn::TypePath>("<&mut &cstr_core::CString as core::fmt::Write>::write_str").unwrap();
+        let first_ident = Guesser::get_first_ident(&full_path).unwrap();
+        assert_eq!(first_ident, "cstr_core");
+    }
+    #[test]
+    fn first_ident_trait_impl_ptr() {
+        let full_path = syn::parse_str::<syn::TypePath>("<*const cstr_core::CString as core::fmt::Pointer>::fmt").unwrap();
+        let first_ident = Guesser::get_first_ident(&full_path).unwrap();
+        assert_eq!(first_ident, "cstr_core");
+    }
+    #[test]
+    fn first_ident_generic_at_beginning() {
+        let full_path = syn::parse_str::<syn::TypePath>("<cstr_core::CString>::fmt").unwrap();
+        let first_ident = Guesser::get_first_ident(&full_path).unwrap();
+        assert_eq!(first_ident, "cstr_core");
     }
 }
 
