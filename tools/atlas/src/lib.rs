@@ -2,6 +2,7 @@ use std::fs::File;
 use std::io;
 use std::path::{Path, PathBuf};
 pub mod sym;
+pub mod sym_v2;
 
 use std::process::Command;
 
