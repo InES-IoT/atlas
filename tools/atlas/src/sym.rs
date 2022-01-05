@@ -39,10 +39,8 @@
 //! https://itanium-cxx-abi.github.io/cxx-abi/abi.html#mangling
 //!
 
-use cargo_lock::Lockfile;
 use lazy_static::lazy_static;
 use regex::Regex;
-use std::borrow::Cow;
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fmt;
@@ -50,10 +48,10 @@ use std::fmt::Debug;
 use std::path::Path;
 use std::process::Command;
 use std::str::FromStr;
-use std::string::ToString;
-use symbolic::common::{Language, Name, NameMangling};
-use symbolic::demangle::{Demangle, DemangleOptions};
-use syn;
+
+#[cfg(test)]
+#[path = "./sym_tests.rs"]
+mod sym_tests;
 
 #[derive(PartialEq, Debug)]
 pub enum SymbolType {
@@ -77,17 +75,25 @@ pub enum SymbolType {
     Unknown,
 }
 
-#[derive(Debug)]
-pub struct Symbol {
+#[derive(PartialEq, Debug)]
+pub enum SymbolLang {
+    Unknown,
+    Rust,
+    C,
+    Cpp,
+}
+
+#[derive(PartialEq, Debug)]
+pub struct RawSymbol {
     addr: u32,
     size: u32,
     sym_type: SymbolType,
     name: String,
 }
 
-impl Default for Symbol {
+impl Default for RawSymbol {
     fn default() -> Self {
-        Symbol {
+        RawSymbol {
             addr: 0,
             size: 0,
             sym_type: SymbolType::Unknown,
@@ -96,9 +102,9 @@ impl Default for Symbol {
     }
 }
 
-impl Symbol {
+impl RawSymbol {
     pub fn new(addr: u32, size: u32, sym_type: SymbolType, name: String) -> Self {
-        Symbol {
+        RawSymbol {
             addr,
             size,
             sym_type,
@@ -107,7 +113,7 @@ impl Symbol {
     }
 }
 
-impl FromStr for Symbol {
+impl FromStr for RawSymbol {
     type Err = SymbolParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
@@ -148,46 +154,100 @@ impl FromStr for Symbol {
         };
 
         let name = String::from(caps.get(4).unwrap().as_str());
-
-        Ok(Symbol::new(addr, size, sym_type, name))
+        Ok(RawSymbol::new(addr, size, sym_type, name))
     }
 }
 
-impl TryFrom<&str> for Symbol {
+impl TryFrom<&str> for RawSymbol {
     type Error = SymbolParseError;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
-        Symbol::from_str(s)
+        RawSymbol::from_str(s)
     }
 }
 
 #[derive(PartialEq, Debug)]
-pub enum SymbolLang {
-    Unknown,
-    Rust,
-    MaybeRust,
-    C,
-    Cpp,
-    MaybeCpp
+pub struct Symbol {
+    addr: u32,
+    size: u32,
+    sym_type: SymbolType,
+    mangled: String,
+    demangled: String,
+    lang: SymbolLang,
 }
 
-#[derive(Debug)]
-pub struct SymbolGuess {
-    pub addr: u32,
-    pub size: u32,
-    pub sym_type: SymbolType,
-    pub name: String,
-    pub lang: SymbolLang,
-}
+impl Symbol {
+    pub fn new(addr: u32, size: u32, sym_type: SymbolType, mangled: String, demangled: String, lang: SymbolLang) -> Self {
+        Symbol {
+            addr,
+            size,
+            sym_type,
+            mangled,
+            demangled,
+            lang,
+        }
+    }
 
-const SYSROOT_CRATES: &[&'static str] = &["std", "core", "proc_macro", "alloc", "test", "compiler_builtins"];
+    pub fn from_rawsymbols<T>(mangled: T, demangled: T) -> Result<Self, SymbolParseError>
+    where
+        T: TryInto<RawSymbol>,
+    {
+        // Didn't get the `?` operator to work because of trait requirements
+        // revolving around `SymbolParseError`.
+        let mangled = match mangled.try_into() {
+            Ok(mangled) => mangled,
+            Err(_) => return Err(SymbolParseError(())),
+        };
+
+        let demangled = match demangled.try_into() {
+            Ok(demangled) => demangled,
+            Err(_) => return Err(SymbolParseError(())),
+        };
+
+        if (mangled.addr != demangled.addr)
+            || (mangled.size != demangled.size)
+            || (mangled.sym_type != demangled.sym_type)
+        {
+            return Err(SymbolParseError(()));
+        }
+
+        Ok(Symbol {
+            addr: mangled.addr,
+            size: mangled.size,
+            sym_type: mangled.sym_type,
+            mangled: mangled.name,
+            demangled: demangled.name,
+            lang: SymbolLang::Unknown,
+        })
+    }
+
+    // Maybe not needed...?
+    pub fn from_rawsymbols_lang<T>(mangled: T, demangled: T, lang: SymbolLang) -> Result<Self, SymbolParseError>
+    where
+        T: TryInto<RawSymbol>,
+    {
+        let mut s = Symbol::from_rawsymbols(mangled, demangled)?;
+        s.lang = lang;
+        Ok(s)
+    }
+
+    pub fn set_language(&mut self, lang: SymbolLang) {
+        self.lang = lang;
+    }
+
+    pub fn related(&self, other: &Symbol) -> bool {
+        !((self.mangled != other.mangled)
+            || (self.demangled != other.demangled)
+            || (self.sym_type != other.sym_type)
+            || (self.size != other.size))
+    }
+}
 
 // TODO:
 // Rewrite this struct with the builder pattern.
 #[derive(Debug, Default)]
 pub struct Guesser {
-    packages: Vec<String>,
-    no_mangle: Vec<String>,
+    lib_syms: Vec<Symbol>,
 }
 
 impl Guesser {
@@ -195,53 +255,7 @@ impl Guesser {
         Default::default()
     }
 
-    pub fn set_packages<'a, T, U>(&mut self, packages: T)
-    where
-        T: Into<Cow<'a, [U]>>,
-        U: 'a + Clone + AsRef<str>,
-    {
-        let mut packages = packages
-            .into()
-            .into_owned()
-            .into_iter()
-            .map(|p| p.as_ref().replace("-", "_"))
-            .collect::<Vec<String>>();
-
-        packages.extend(SYSROOT_CRATES.iter().map(|&s| String::from(s)));
-
-        self.packages = packages;
-    }
-
-    pub fn from_lock(&mut self, lock: impl AsRef<Path>) -> Result<(), SymbolParseError> {
-        let lockfile = Lockfile::load(lock).map_err(|_e| SymbolParseError(()))?;
-
-        let mut packages = lockfile
-            .packages
-            .into_iter()
-            .map(|p| p.name.as_str().replace("-", "_"))
-            .collect::<Vec<String>>();
-
-        packages.extend(SYSROOT_CRATES.iter().map(|&s| String::from(s)));
-        self.packages = packages;
-        Ok(())
-    }
-
-    pub fn set_no_mangle<'a, T, U>(&mut self, no_mangle: T)
-    where
-        T: Into<Cow<'a, [U]>>,
-        U: 'a + Clone + AsRef<str>,
-    {
-        let no_mangle = no_mangle
-            .into()
-            .into_owned()
-            .into_iter()
-            .map(|p| p.as_ref().to_owned())
-            .collect::<Vec<String>>();
-
-        self.no_mangle = no_mangle;
-    }
-
-    pub fn from_lib<T, U>(&mut self, nm: T, lib: U) -> Result<(), SymbolParseError>
+    pub fn add_rust_lib<T, U>(&mut self, nm: T, lib: U) -> Result<(), SymbolParseError>
     where
         T: AsRef<Path>,
         U: AsRef<Path>,
@@ -274,222 +288,55 @@ impl Guesser {
             std::str::from_utf8(&demangled_out.stdout).map_err(|_e| SymbolParseError(()))?;
 
         for (mangled, demangled) in mangled_str.lines().zip(demangled_str.lines()) {
-            let mangled = match Symbol::from_str(mangled) {
+            let s = match Symbol::from_rawsymbols_lang(mangled,demangled, SymbolLang::Rust) {
                 Ok(s) => s,
+                // TODO:
+                // Differentiate between the various reasons for an error. Some
+                // might be expected (e.g lines like "mulvdi3.o:") while others
+                // should not fail and should inform the user.
                 Err(_) => continue,
             };
 
-            let demangled = match Symbol::from_str(demangled) {
-                Ok(s) => s,
-                Err(_) => continue,
-            };
-
-            if mangled.name == demangled.name {
+            if s.mangled == s.demangled {
                 // TODO:
                 // Rewrite this using a simple regex and check the performance
                 // difference
-                let mut chars = mangled.name.chars();
+                let mut chars = s.mangled.chars();
                 if let Some(c) = chars.next() {
                     if matches!(c, 'a'..='z' | 'A'..='Z' | '_') {
-                        if mangled
-                            .name
+                        // TODO:
+                        // Reuse the iterator here?
+                        if s.mangled
                             .chars()
                             .all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'))
                         {
-                            self.no_mangle.push(mangled.name);
+                            self.lib_syms.push(s);
                         }
                     }
                 }
+            } else {
+                self.lib_syms.push(s);
             }
         }
-
         Ok(())
     }
 
-    pub fn guess<T>(&self, mangled: T, demangled: T) -> Result<SymbolGuess, SymbolParseError>
+    pub fn guess<T>(&self, mangled: T, demangled: T) -> Result<Symbol, SymbolParseError>
     where
-        T: TryInto<Symbol>,
+        T: TryInto<RawSymbol>,
     {
-        // Didn't get the `?` operator to work because of trait requirements
-        // revolving around `SymbolParseError`.
-        let mangled = match mangled.try_into() {
-            Ok(mangled) => mangled,
-            Err(_) => return Err(SymbolParseError(())),
-        };
+        let mut sym = Symbol::from_rawsymbols(mangled, demangled)?;
 
-        let demangled = match demangled.try_into() {
-            Ok(demangled) => demangled,
-            Err(_) => return Err(SymbolParseError(())),
-        };
-
-        if (mangled.addr != demangled.addr)
-            && (mangled.size != demangled.size)
-            && (mangled.sym_type != demangled.sym_type)
-        {
-            return Err(SymbolParseError(()));
-        }
-
-        // Create struct here because it would otherwise need to be created at
-        // all of the following return statements down there. Only drawback is
-        // that the `demangled.name` String is needed while determining the
-        // language but it has obviously already been moved into this struct.
-        let mut guess = SymbolGuess {
-            addr: demangled.addr,
-            size: demangled.size,
-            sym_type: demangled.sym_type,
-            name: demangled.name,
-            lang: SymbolLang::Unknown,
-        };
-
-        if mangled.name == guess.name {
-            // TODO:
-            // See documentation: should "any" be used here instead of &String?
-            if self.no_mangle.contains(&mangled.name) {
-                guess.lang = SymbolLang::Rust;
-                return Ok(guess);
+        if self.lib_syms.iter().any(|lib_sym| sym.related(lib_sym)) {
+            sym.lang = SymbolLang::Rust;
+        } else {
+            if sym.mangled == sym.demangled {
+                sym.lang = SymbolLang::C;
             } else {
-                guess.lang = SymbolLang::C;
-                return Ok(guess);
+                sym.lang = SymbolLang::Cpp;
             }
         }
-
-        // Demangle the mangled symbols using the symbolic package. Once with
-        // the Rust preset and once with Cpp. The automatic detection cannot be
-        // used as it tries Rust first and immediately returns even if the
-        // symbol could also be valid Cpp.
-        let mut name = Name::new(&mangled.name,NameMangling::Mangled, Language::Rust);
-        let rust_demangled = name.demangle(DemangleOptions::complete());
-        name.set_language(Language::Cpp);
-        let cpp_demangled = name.demangle(DemangleOptions::complete());
-        let rust_demangled = rust_demangled.filter(|s| s==&guess.name);
-        let cpp_demangled = cpp_demangled.filter(|s| s==&guess.name);
-
-        // Parse the demangled (by the nm tool) symbol name as a Rust type path.
-        // This will later allow to check if there is an `as` keyword within
-        // angled brackets which would be a clear sign for a Rust symbol. Also,
-        // it allows the extraction of the first identifier in the path which
-        // would be present in self.packages if it is a Rust symbol.
-        let full_path = syn::parse_str::<syn::TypePath>(&guess.name);
-
-        // dbg!(&rust_demangled);
-        // dbg!(&cpp_demangled);
-
-        match (&full_path, rust_demangled, cpp_demangled) {
-            (Err(_), None, None) => {
-                println!("Cannot parse or demangle symbol");
-                println!("{:?}", &guess);
-                return Err(SymbolParseError(()));
-            },
-            (Err(_), None, Some(_)) => {
-                guess.lang = SymbolLang::Cpp;
-                return Ok(guess);
-            },
-            (Err(_), Some(_), None) => {
-                // println!("Can demangle symbol as Rust but not parse the type path");
-                // println!("{:?}", &guess);
-                return Err(SymbolParseError(()));
-            },
-            (Err(_), Some(_), Some(_)) => {
-                println!("Can demangle symbol as Rust and Cpp but not parse as a Rust type path");
-                println!("Probably Cpp...");
-                guess.lang = SymbolLang::MaybeCpp;
-                println!("{:?}", &guess);
-                return Ok(guess);
-            },
-            (Ok(full_path), None, None) => {
-                // println!("Cannot demangle but CAN parse Rust type path");
-                let as_keyword = Guesser::qself_with_as(&full_path);
-                let first_ident_in_packages = self.first_ident_in_packages(&full_path)?;
-                if as_keyword || first_ident_in_packages {
-                    guess.lang = SymbolLang::Rust;
-                } else {
-                    guess.lang = SymbolLang::MaybeRust;
-                }
-                // This might be unwanted...
-                if !first_ident_in_packages {
-                    println!("Symbol is (maybe) Rust but first ident not in packages!");
-                    println!("{:?}", &guess);
-                }
-                return Ok(guess);
-            },
-            (Ok(full_path), None, Some(_)) => {
-                // println!("Can demangle as Cpp and can parse Rust type path");
-                let as_keyword = Guesser::qself_with_as(&full_path);
-                if as_keyword {
-                    println!("Found \"as\" keyword in Cpp symbol");
-                    return Err(SymbolParseError(()));
-                }
-                guess.lang = SymbolLang::Cpp;
-                // println!("{:?}", &guess);
-                return Ok(guess);
-            },
-            (Ok(full_path), Some(_), None) => {
-                // println!("Can demangle as Rust and can parse Rust type path");
-                let first_ident_in_packages = self.first_ident_in_packages(&full_path)?;
-                if !first_ident_in_packages {
-                    println!("Rust symbol but first ident not in packages!");
-                    println!("{:?}", &guess);
-                }
-                guess.lang = SymbolLang::Rust;
-                return Ok(guess);
-            },
-            (Ok(full_path), Some(_), Some(_)) => {
-                // println!("Can demangle as Rust and Cpp and can parse Rust type path");
-                let as_keyword = Guesser::qself_with_as(&full_path);
-                let first_ident_in_packages = self.first_ident_in_packages(&full_path)?;
-                if as_keyword || first_ident_in_packages {
-                    guess.lang = SymbolLang::Rust;
-                } else {
-                    guess.lang = SymbolLang::Cpp;
-                }
-                // println!("{:?}", &guess);
-                return Ok(guess);
-            },
-        }
-    }
-
-    fn get_first_ident(full_path: &syn::TypePath) -> Option<String> {
-        let path = match full_path.qself {
-            Some(ref qself) => {
-                // `full_path` contains an explicit Self type.
-                // E.g. `<cstr_core::CString as core::ops::drop::Drop>::drop`
-                // 
-                // The explicit Self type could be behind one or more
-                // references/pointers. Loop over the `Box<Type>` until a
-                // `Type::Path` is found.
-                let mut type_enum = &*qself.ty;
-                loop {
-                    match type_enum {
-                        syn::Type::Path(qself_path) => break &qself_path.path,
-                        syn::Type::Reference(type_ref) => type_enum = &*type_ref.elem,
-                        syn::Type::Ptr(type_ptr) => type_enum = &*type_ptr.elem,
-                        _ => return None,
-                    }
-                }
-            },
-            None => {
-                // `full_path` does not contain an explicit Self type.
-                // E.g.: `cstr_core::CString::new`
-                &full_path.path
-            },
-        };
-
-        match path.segments.first() {
-            Some(path_seg) => Some((*path_seg).ident.to_string()),
-            _ => None,
-        }
-    }
-
-    fn qself_with_as(full_path: &syn::TypePath) -> bool {
-        match full_path.qself.as_ref().and_then(|_| full_path.qself.as_ref().unwrap().as_token) {
-            Some(_) => true,
-            None => false,
-        }
-    }
-
-    fn first_ident_in_packages(&self, full_path: &syn::TypePath) -> Result<bool, SymbolParseError> {
-        let first_ident = Guesser::get_first_ident(full_path).ok_or(SymbolParseError(()))?;
-        Ok(self.packages.contains(&first_ident)) 
+        Ok(sym)
     }
 }
 
@@ -506,752 +353,3 @@ impl fmt::Display for SymbolParseError {
         write!(f, "invalid symbol syntax")
     }
 }
-
-#[cfg(test)]
-mod symbol_tests {
-    use super::*;
-
-    #[test]
-    fn new_symbol() {
-        let s = Symbol::new(
-            0x1234_5678,
-            0x1111_1111,
-            SymbolType::Absolute,
-            String::from("Test"),
-        );
-        assert_eq!(s.addr, 0x1234_5678);
-        assert_eq!(s.size, 0x1111_1111);
-        assert_eq!(s.sym_type, SymbolType::Absolute);
-        assert_eq!(s.name, String::from("Test"));
-    }
-
-    #[test]
-    fn default_symbol() {
-        let s: Symbol = Default::default();
-        assert_eq!(s.addr, 0);
-        assert_eq!(s.size, 0);
-        assert_eq!(s.sym_type, SymbolType::Unknown);
-        assert_eq!(s.name, String::new());
-    }
-
-    #[test]
-    fn fromstr_empty() {
-        let s = Symbol::from_str("");
-        assert!(s.is_err());
-        assert_eq!(s.unwrap_err(), SymbolParseError(()));
-    }
-
-    #[test]
-    fn fromstr_whitespace() {
-        let s = Symbol::from_str("   ");
-        assert!(s.is_err());
-        assert_eq!(s.unwrap_err(), SymbolParseError(()));
-    }
-
-    #[test]
-    fn fromstr() {
-        let s = Symbol::from_str("00008700 00000064 T net_if_up");
-        assert!(s.is_ok());
-        let s = s.unwrap();
-        assert_eq!(s.addr, 0x00008700);
-        assert_eq!(s.size, 0x00000064);
-        assert_eq!(s.sym_type, SymbolType::TextSection);
-        assert_eq!(s.name, String::from("net_if_up"));
-    }
-
-    #[test]
-    fn fromstr_leading_trailing_whitespace() {
-        let s = Symbol::from_str("   00008700 00000064 T net_if_up    ");
-        assert!(s.is_ok());
-        let s = s.unwrap();
-        assert_eq!(s.addr, 0x00008700);
-        assert_eq!(s.size, 0x00000064);
-        assert_eq!(s.sym_type, SymbolType::TextSection);
-        assert_eq!(s.name, String::from("net_if_up"));
-    }
-
-    #[test]
-    fn fromstr_trait_impl() {
-        let s = Symbol::from_str(
-            " 0002eb78 00000022 t   <cstr_core::CString as core::ops::drop::Drop>::drop  ",
-        );
-        assert!(s.is_ok());
-        let s = s.unwrap();
-        assert_eq!(s.addr, 0x0002eb78);
-        assert_eq!(s.size, 0x00000022);
-        assert_eq!(s.sym_type, SymbolType::TextSection);
-        assert_eq!(
-            s.name,
-            String::from("<cstr_core::CString as core::ops::drop::Drop>::drop")
-        );
-    }
-
-    #[test]
-    fn fromstr_generic_func() {
-        let s =
-            Symbol::from_str("0002ea9e    0000001c T core::ptr::drop_in_place<cstr_core::CString>");
-        assert!(s.is_ok());
-        let s = s.unwrap();
-        assert_eq!(s.addr, 0x0002ea9e);
-        assert_eq!(s.size, 0x0000001c);
-        assert_eq!(s.sym_type, SymbolType::TextSection);
-        assert_eq!(
-            s.name,
-            String::from("core::ptr::drop_in_place<cstr_core::CString>")
-        );
-    }
-
-    #[test]
-    fn fromstr_leading_double_colon() {
-        let s = Symbol::from_str("0002ea9e    0000001c T ::arbitrary::func");
-        assert!(s.is_ok());
-        let s = s.unwrap();
-        assert_eq!(s.addr, 0x0002ea9e);
-        assert_eq!(s.size, 0x0000001c);
-        assert_eq!(s.sym_type, SymbolType::TextSection);
-        assert_eq!(s.name, String::from("::arbitrary::func"));
-    }
-
-    #[test]
-    fn fromstr_single_char_as_name() {
-        let s = Symbol::from_str("20001370 00000010 b s");
-        assert!(s.is_ok());
-        let s = s.unwrap();
-        assert_eq!(s.addr, 0x20001370);
-        assert_eq!(s.size, 0x00000010);
-        assert_eq!(s.sym_type, SymbolType::BssSection);
-        assert_eq!(s.name, String::from("s"));
-    }
-
-    #[test]
-    fn fromstr_invalid_addr() {
-        let s = Symbol::from_str("000K08700 00000064 T net_if_up");
-        assert!(s.is_err());
-        assert_eq!(s.unwrap_err(), SymbolParseError(()));
-    }
-
-    #[test]
-    fn fromstr_invalid_size() {
-        let s = Symbol::from_str("00008700 m0000064 T net_if_up");
-        assert!(s.is_err());
-        assert_eq!(s.unwrap_err(), SymbolParseError(()));
-    }
-
-    #[test]
-    fn fromstr_invalid_type() {
-        let s = Symbol::from_str("00008700 00000064 X net_if_up");
-        assert!(s.is_err());
-        assert_eq!(s.unwrap_err(), SymbolParseError(()));
-    }
-
-    #[test]
-    fn fromstr_missing_name() {
-        let s = Symbol::from_str("00008700 00000064 T");
-        assert!(s.is_err());
-        assert_eq!(s.unwrap_err(), SymbolParseError(()));
-    }
-
-    #[test]
-    fn fromstr_too_many_type_chars() {
-        let s = Symbol::from_str("00008700 00000064 Tt net_if_up");
-        assert!(s.is_err());
-        assert_eq!(s.unwrap_err(), SymbolParseError(()));
-    }
-
-    #[test]
-    fn tryfrom() {
-        let s = Symbol::try_from("00008700 00000064 T net_if_up");
-        assert!(s.is_ok());
-        let s = s.unwrap();
-        assert_eq!(s.addr, 0x00008700);
-        assert_eq!(s.size, 0x00000064);
-        assert_eq!(s.sym_type, SymbolType::TextSection);
-        assert_eq!(s.name, String::from("net_if_up"));
-    }
-}
-
-#[cfg(test)]
-mod guesser_tests {
-    use super::*;
-
-    #[test]
-    fn new_vec_string() {
-        let p = vec![String::from("bare-metal"), String::from("cstr_core")];
-        let n = vec![
-            String::from("some_no_mangle"),
-            String::from("another_no_mangle"),
-        ];
-        let mut gsr = Guesser::new();
-        gsr.set_packages(p);
-        gsr.set_no_mangle(n);
-        assert_eq!(
-            gsr.packages,
-            [
-                "bare_metal",
-                "cstr_core",
-                "std",
-                "core",
-                "proc_macro",
-                "alloc",
-                "test",
-                "compiler_builtins"
-            ]
-        );
-        assert_eq!(gsr.no_mangle, ["some_no_mangle", "another_no_mangle"]);
-        // let _ = v.len();  // v moved by "Guesser::new()"
-    }
-
-    #[test]
-    fn new_slice_string() {
-        let p = vec![String::from("bare-metal"), String::from("cstr_core")];
-        let n = vec![
-            String::from("some_no_mangle"),
-            String::from("another_no_mangle"),
-        ];
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&p[..]);
-        gsr.set_no_mangle(&n[..]);
-        assert_eq!(
-            gsr.packages,
-            [
-                "bare_metal",
-                "cstr_core",
-                "std",
-                "core",
-                "proc_macro",
-                "alloc",
-                "test",
-                "compiler_builtins"
-            ]
-        );
-        let _ = p.len(); // p still valid
-    }
-
-    #[test]
-    fn new_slice_str() {
-        let p = vec!["bare-metal", "cstr_core"];
-        let n = vec!["some_no_mangle", "another_no_mangle"];
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&p[..]);
-        gsr.set_no_mangle(&n[..]);
-        assert_eq!(
-            gsr.packages,
-            [
-                "bare_metal",
-                "cstr_core",
-                "std",
-                "core",
-                "proc_macro",
-                "alloc",
-                "test",
-                "compiler_builtins"
-            ]
-        );
-        let _ = p.len(); // p still valid
-    }
-
-    #[test]
-    fn from_lock_valid() {
-        let mut lock = std::env::current_dir().unwrap();
-        lock.push("./aux/Cargo.lock");
-        let lock = lock.canonicalize().unwrap();
-        let mut gsr = Guesser::new();
-        gsr.from_lock(lock).unwrap();
-        assert_eq!(gsr.packages.len(), 25);
-        assert_eq!(
-            gsr.packages,
-            [
-                "bare_metal",
-                "bitfield",
-                "cfg_if",
-                "cortex_m",
-                "cstr_core",
-                "cty",
-                "embedded_hal",
-                "memchr",
-                "nb",
-                "nb",
-                "panic_halt",
-                "rustc_version",
-                "secprint",
-                "semver",
-                "semver_parser",
-                "vcell",
-                "void",
-                "volatile_register",
-                "zephyr_alloc",
-                "std",
-                "core",
-                "proc_macro",
-                "alloc",
-                "test",
-                "compiler_builtins"
-            ]
-        );
-    }
-
-    #[test]
-    fn from_lock_invalid() {
-        let mut lock = std::env::current_dir().unwrap();
-        lock.push("./aux/rust_minimal_node.elf");
-        let lock = lock.canonicalize().unwrap();
-        let mut gsr = Guesser::new();
-        assert!(gsr.from_lock(lock).is_err());
-    }
-
-    #[test]
-    fn from_lib() {
-        let mut lib = std::env::current_dir().unwrap();
-        lib.push("./aux/libsecprint.a");
-        let lib = lib.canonicalize().unwrap();
-        let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
-        let mut gsr = Guesser::new();
-        gsr.from_lib(nm, lib).unwrap();
-
-        assert_eq!(gsr.no_mangle.len(), 291);
-        assert!(gsr.no_mangle.contains(&String::from("rust_main")));
-        // Some mangled symbol that should have been filtered out
-        assert!(!gsr.no_mangle.contains(&String::from(
-            "_ZN4core7unicode12unicode_data1n7OFFSETS17hc40d3e150216ec3bE"
-        )));
-        // Some non-mangled symbol but is not a valid C identifier
-        assert!(!gsr.no_mangle.contains(&String::from(".L__unnamed_1")));
-    }
-
-    #[test]
-    fn from_lock_from_lib() {
-        let mut lock = std::env::current_dir().unwrap();
-        lock.push("./aux/Cargo.lock");
-        let mut lock = lock.canonicalize().unwrap();
-        let mut gsr = Guesser::new();
-        gsr.from_lock(&lock).unwrap();
-        lock.pop();
-        lock.push("./libsecprint.a");
-        let lib = lock.canonicalize().unwrap();
-        let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
-        gsr.from_lib(nm, lib).unwrap();
-        assert_eq!(gsr.packages.len(), 25);
-        assert_eq!(
-            gsr.packages,
-            [
-                "bare_metal",
-                "bitfield",
-                "cfg_if",
-                "cortex_m",
-                "cstr_core",
-                "cty",
-                "embedded_hal",
-                "memchr",
-                "nb",
-                "nb",
-                "panic_halt",
-                "rustc_version",
-                "secprint",
-                "semver",
-                "semver_parser",
-                "vcell",
-                "void",
-                "volatile_register",
-                "zephyr_alloc",
-                "std",
-                "core",
-                "proc_macro",
-                "alloc",
-                "test",
-                "compiler_builtins"
-            ]
-        );
-        assert_eq!(gsr.no_mangle.len(), 291);
-        assert!(gsr.no_mangle.contains(&String::from("rust_main")));
-        // Some mangled symbol that should have been filtered out
-        assert!(!gsr.no_mangle.contains(&String::from(
-            "_ZN4core7unicode12unicode_data1n7OFFSETS17hc40d3e150216ec3bE"
-        )));
-        // Some non-mangled symbol but is not a valid C identifier
-        assert!(!gsr.no_mangle.contains(&String::from(".L__unnamed_1")));
-    }
-    
-    #[test]
-    fn from_lock_permission_denied() {
-        let mut gsr = Guesser::new();
-        assert!(gsr.from_lock("/etc/shadow").is_err());
-    }
-
-    #[test]
-    fn from_lib_bad_nm_path() {
-        let mut lib = std::env::current_dir().unwrap();
-        lib.push("./aux/libsecprint.a");
-        let lib = lib.canonicalize().unwrap();
-        let mut gsr = Guesser::new();
-        assert!(gsr.from_lib("/bad/path", lib).is_err());
-    }
-
-    #[test]
-    fn from_lib_permission_denied() {
-        let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
-        let mut gsr = Guesser::new();
-        assert!(gsr.from_lib(nm, "/etc/shadow").is_err());
-    }
-
-    #[test]
-    fn guess_rust_from_symbols() {
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
-        gsr.set_no_mangle(&["some_no_mangle"][..]);
-        let guess = gsr
-            .guess(
-                Symbol::from_str(
-                    "0002e1d4 00000022 T _ZN9cstr_core7CString3new17hed72bf580cc06965E",
-                )
-                .unwrap(),
-                Symbol::from_str("0002e1d4 00000022 T cstr_core::CString::new").unwrap(),
-            )
-            .unwrap();
-
-        assert_eq!(guess.addr, 0x0002_e1d4);
-        assert_eq!(guess.size, 0x0000_0022);
-        assert_eq!(guess.sym_type, SymbolType::TextSection);
-        assert_eq!(guess.name, "cstr_core::CString::new");
-        assert_eq!(guess.lang, SymbolLang::Rust);
-    }
-
-    #[test]
-    fn guess_rust_from_str() {
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
-        gsr.set_no_mangle(&["some_no_mangle"][..]);
-        let guess = gsr
-            .guess(
-                "0002e1d4 00000022 T _ZN9cstr_core7CString3new17hed72bf580cc06965E",
-                "0002e1d4 00000022 T cstr_core::CString::new",
-            )
-            .unwrap();
-
-        assert_eq!(guess.addr, 0x0002_e1d4);
-        assert_eq!(guess.size, 0x0000_0022);
-        assert_eq!(guess.sym_type, SymbolType::TextSection);
-        assert_eq!(guess.name, "cstr_core::CString::new");
-        assert_eq!(guess.lang, SymbolLang::Rust);
-    }
-
-    #[test]
-    fn guess_rust_generic_func() {
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
-        gsr.set_no_mangle(&["some_no_mangle"][..]);
-        let guess = gsr
-            .guess(
-                "0002ea9e 0000001c T _ZN4core3ptr39drop_in_place$LT$cstr_core..CString$GT$17h687c6bdfaf214436E",
-                "0002ea9e 0000001c T core::ptr::drop_in_place<cstr_core::CString>"
-            ).unwrap();
-
-        assert_eq!(guess.addr, 0x0002_ea9e);
-        assert_eq!(guess.size, 0x0000_001c);
-        assert_eq!(guess.sym_type, SymbolType::TextSection);
-        assert_eq!(guess.name, "core::ptr::drop_in_place<cstr_core::CString>");
-        assert_eq!(guess.lang, SymbolLang::Rust);
-    }
-
-    #[test]
-    fn guess_rust_trait_impl() {
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
-        gsr.set_no_mangle(&["some_no_mangle"][..]);
-        let guess = gsr
-            .guess(
-                "0002eb78 00000022 t _ZN60_$LT$cstr_core..CString$u20$as$u20$core..ops..drop..Drop$GT$4drop17h462206ac2c399119E",
-                "0002eb78 00000022 t <cstr_core::CString as core::ops::drop::Drop>::drop"
-            ).unwrap();
-
-        assert_eq!(guess.addr, 0x0002_eb78);
-        assert_eq!(guess.size, 0x0000_0022);
-        assert_eq!(guess.sym_type, SymbolType::TextSection);
-        assert_eq!(
-            guess.name,
-            "<cstr_core::CString as core::ops::drop::Drop>::drop"
-        );
-        assert_eq!(guess.lang, SymbolLang::Rust);
-    }
-    
-    #[test]
-    fn guess_rust_trait_impl_mutref() {
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
-        gsr.set_no_mangle(&["some_no_mangle"][..]);
-        let guess = gsr
-            .guess(
-                // The mangled name doesn't get demangled by the guesser. Thus,
-                // as soon as mangled and demangled are different, it assumes
-                // either Rust or Cpp and just uses the demangled one for
-                // further processing.
-                "00032d6c 00000006 t _ljsdfljsdfljksfd",
-                "00032d6c 00000006 t <&mut cstr_core::CString as core::fmt::Write>::write_str"
-            ).unwrap();
-
-        assert_eq!(guess.addr, 0x00032d6c);
-        assert_eq!(guess.size, 0x00000006);
-        assert_eq!(guess.sym_type, SymbolType::TextSection);
-        assert_eq!(
-            guess.name,
-            "<&mut cstr_core::CString as core::fmt::Write>::write_str"
-        );
-        assert_eq!(guess.lang, SymbolLang::Rust);
-    }
-
-    #[test]
-    fn guess_rust_trait_impl_double_ref() {
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
-        gsr.set_no_mangle(&["some_no_mangle"][..]);
-        let guess = gsr
-            .guess(
-                "00032d6c 00000006 t _lksjdflkjsflkjsdfl",
-                "00032d6c 00000006 t <&mut &cstr_core::CString as core::fmt::Write>::write_str"
-            ).unwrap();
-
-        assert_eq!(guess.addr, 0x00032d6c);
-        assert_eq!(guess.size, 0x00000006);
-        assert_eq!(guess.sym_type, SymbolType::TextSection);
-        assert_eq!(
-            guess.name,
-            "<&mut &cstr_core::CString as core::fmt::Write>::write_str"
-        );
-        assert_eq!(guess.lang, SymbolLang::Rust);
-    }
-
-    #[test]
-    fn guess_rust_trait_impl_ptr() {
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
-        gsr.set_no_mangle(&["some_no_mangle"][..]);
-        let guess = gsr
-            .guess(
-                "0002eda6 000000a6 T _lksjdflkjsflkjsdfl",
-                "0002eda6 000000a6 T <*const cstr_core::CString as core::fmt::Pointer>::fmt"
-            ).unwrap();
-
-        assert_eq!(guess.addr, 0x0002eda6);
-        assert_eq!(guess.size, 0x000000a6);
-        assert_eq!(guess.sym_type, SymbolType::TextSection);
-        assert_eq!(
-            guess.name,
-            "<*const cstr_core::CString as core::fmt::Pointer>::fmt"
-        );
-        assert_eq!(guess.lang, SymbolLang::Rust);
-    }
-    
-    #[test]
-    fn guess_rust_trait_impl_generic_ptr() {
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
-        gsr.set_no_mangle(&["some_no_mangle"][..]);
-        let guess = gsr
-            .guess(
-                "0002eda6 000000a6 T _ZN54_$LT$$BP$const$u20$T$u20$as$u20$core..fmt..Pointer$GT$3fmt17hde7d70127d765717E",
-                "0002eda6 000000a6 T <*const T as core::fmt::Pointer>::fmt"
-            ).unwrap();
-
-        assert_eq!(guess.addr, 0x0002eda6);
-        assert_eq!(guess.size, 0x000000a6);
-        assert_eq!(guess.sym_type, SymbolType::TextSection);
-        assert_eq!(
-            guess.name,
-            "<*const T as core::fmt::Pointer>::fmt"
-        );
-        assert_eq!(guess.lang, SymbolLang::Rust);
-    }
-
-    // #[test]
-    // fn guess_rust_trait_impl_weird_generic() {
-    //     let mut gsr = Guesser::new();
-    //     gsr.set_packages(&["bare-metal", "cstr_core"][..]);
-    //     gsr.set_no_mangle(&["some_no_mangle"][..]);
-    //     let guess = gsr
-    //         .guess(
-    //             "0002ece2 00000022 T _ZN4core3ptr77_$LT$impl$u20$core..fmt..Pointer$u20$for$u20$fn$LP$$RP$$u20$.$GT$$u20$Ret$GT$3fmt17h8b264a36c1e2f9a7E",
-    //             "0002ece2 00000022 T core::ptr::<impl core::fmt::Pointer for fn() -> Ret>::fmt"
-    //         ).unwrap();
-
-    //     assert_eq!(guess.addr, 0x0002ece2);
-    //     assert_eq!(guess.size, 0x00000022);
-    //     assert_eq!(guess.sym_type, SymbolType::TextSection);
-    //     assert_eq!(
-    //         guess.name,
-    //         "core::ptr::<impl core::fmt::Pointer for fn() -> Ret>::fmt"
-    //     );
-    //     assert_eq!(guess.lang, SymbolLang::Rust);
-    // }
-
-    #[test]
-    fn guess_rust_trait_impl_no_as() {
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
-        gsr.set_no_mangle(&["some_no_mangle"][..]);
-        let guess = gsr
-            .guess(
-                "0002eda6 000000a6 T _lksjdflkjsflkjsdfl",
-                "0002eda6 000000a6 T <*const cstr_core::CString core::fmt::Pointer>::fmt"
-            );
-        assert!(guess.is_err());
-
-        // assert_eq!(guess.addr, 0x0002eda6);
-        // assert_eq!(guess.size, 0x000000a6);
-        // assert_eq!(guess.sym_type, SymbolType::TextSection);
-        // assert_eq!(
-        //     guess.name,
-        //     "<*const cstr_core::CString core::fmt::Pointer>::fmt"
-        // );
-        // assert_eq!(guess.lang, SymbolLang::Cpp);
-    }
- 
-    #[test]
-    fn guess_rust_generic_at_beginning() {
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
-        gsr.set_no_mangle(&["some_no_mangle"][..]);
-        let guess = gsr
-            .guess(
-                "0002eda6 000000a6 T _lksjdflkjsflkjsdfl",
-                "0002eda6 000000a6 T <cstr_core::CString>::fmt"
-            ).unwrap();
-
-        assert_eq!(guess.addr, 0x0002eda6);
-        assert_eq!(guess.size, 0x000000a6);
-        assert_eq!(guess.sym_type, SymbolType::TextSection);
-        assert_eq!(
-            guess.name,
-            "<cstr_core::CString>::fmt"
-        );
-        assert_eq!(guess.lang, SymbolLang::Rust);
-    }
-    
-    // TODO:
-    // If strings parse correctly as Rust but the first identifier of the 
-    // qualified name cannot be found in the known packages, mark them somehow
-    // as "Possibly Rust. User interaction required..."
-    //
-    // Check if this is possible:
-    // impl Display for Option<some_type>
-    //
-    // If yes, will this correctly be recognized?
-
-    #[test]
-    fn guess_cpp() {
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core", "ot"][..]);
-        gsr.set_no_mangle(&["some_no_mangle"][..]);
-        let guess = gsr
-            .guess(
-                "0003a26c 00000010 W _ZN2ot10LinkedListINS_15AddressResolver10CacheEntryEE4PushERS2_",
-                "0003a26c 00000010 W ot::LinkedList<ot::AddressResolver::CacheEntry>::Push(ot::AddressResolver::CacheEntry&)",
-            )
-            .unwrap();
-        assert_eq!(guess.addr, 0x0003_a26c);
-        assert_eq!(guess.size, 0x0000_0010);
-        assert_eq!(guess.sym_type, SymbolType::Weak);
-        assert_eq!(guess.name, "ot::LinkedList<ot::AddressResolver::CacheEntry>::Push(ot::AddressResolver::CacheEntry&)");
-        assert_eq!(guess.lang, SymbolLang::Cpp);
-    }
-
-    #[test]
-    fn guess_cpp_could_be_rust() {
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
-        gsr.set_no_mangle(&["some_no_mangle"][..]);
-        let guess = gsr
-            .guess(
-                "0001c36c 00000028 W _ZN2ot10LinkedListINS_15AddressResolver10CacheEntryEE3PopEv",
-                "0001c36c 00000028 W ot::LinkedList<ot::AddressResolver::CacheEntry>::Pop()",
-            )
-            .unwrap();
-        assert_eq!(guess.addr, 0x0001_c36c);
-        assert_eq!(guess.size, 0x0000_0028);
-        assert_eq!(guess.sym_type, SymbolType::Weak);
-        assert_eq!(
-            guess.name,
-            "ot::LinkedList<ot::AddressResolver::CacheEntry>::Pop()"
-        );
-        assert_eq!(guess.lang, SymbolLang::Cpp);
-    }
-
-    #[test]
-    fn guess_c() {
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
-        gsr.set_no_mangle(&["some_no_mangle"][..]);
-        let guess = gsr
-            .guess(
-                "00008700 00000064 T net_if_up",
-                "00008700 00000064 T net_if_up",
-            )
-            .unwrap();
-        assert_eq!(guess.addr, 0x0000_8700);
-        assert_eq!(guess.size, 0x0000_0064);
-        assert_eq!(guess.sym_type, SymbolType::TextSection);
-        assert_eq!(guess.name, "net_if_up");
-        assert_eq!(guess.lang, SymbolLang::C);
-    }
-
-    #[test]
-    fn guess_rust_no_mangle() {
-        let mut gsr = Guesser::new();
-        gsr.set_packages(&["bare-metal", "cstr_core"][..]);
-        gsr.set_no_mangle(&["some_no_mangle", "net_if_up", "another"][..]);
-        let guess = gsr
-            .guess(
-                "00008700 00000064 T net_if_up",
-                "00008700 00000064 T net_if_up",
-            )
-            .unwrap();
-        assert_eq!(guess.addr, 0x0000_8700);
-        assert_eq!(guess.size, 0x0000_0064);
-        assert_eq!(guess.sym_type, SymbolType::TextSection);
-        assert_eq!(guess.name, "net_if_up");
-        assert_eq!(guess.lang, SymbolLang::Rust);
-    }
-
-    #[test]
-    fn first_ident() {
-        let full_path = syn::parse_str::<syn::TypePath>("cstr_core::CString::new").unwrap();
-        let first_ident = Guesser::get_first_ident(&full_path).unwrap();
-        assert_eq!(first_ident, "cstr_core");
-    }
-    #[test]
-    fn first_ident_generic_func() {
-        let full_path = syn::parse_str::<syn::TypePath>("core::ptr::drop_in_place<cstr_core::CString>").unwrap();
-        let first_ident = Guesser::get_first_ident(&full_path).unwrap();
-        assert_eq!(first_ident, "core");
-    }
-    #[test]
-    fn first_ident_trait_impl() {
-        let full_path = syn::parse_str::<syn::TypePath>("<cstr_core::CString as core::ops::drop::Drop>::drop").unwrap();
-        let first_ident = Guesser::get_first_ident(&full_path).unwrap();
-        assert_eq!(first_ident, "cstr_core");
-    }
-    #[test]
-    fn first_ident_trait_impl_mutref() {
-        let full_path = syn::parse_str::<syn::TypePath>("<&mut cstr_core::CString as core::fmt::Write>::write_str").unwrap();
-        let first_ident = Guesser::get_first_ident(&full_path).unwrap();
-        assert_eq!(first_ident, "cstr_core");
-    }
-    #[test]
-    fn first_ident_trait_impl_double_ref() {
-        let full_path = syn::parse_str::<syn::TypePath>("<&mut &cstr_core::CString as core::fmt::Write>::write_str").unwrap();
-        let first_ident = Guesser::get_first_ident(&full_path).unwrap();
-        assert_eq!(first_ident, "cstr_core");
-    }
-    #[test]
-    fn first_ident_trait_impl_ptr() {
-        let full_path = syn::parse_str::<syn::TypePath>("<*const cstr_core::CString as core::fmt::Pointer>::fmt").unwrap();
-        let first_ident = Guesser::get_first_ident(&full_path).unwrap();
-        assert_eq!(first_ident, "cstr_core");
-    }
-    #[test]
-    fn first_ident_generic_at_beginning() {
-        let full_path = syn::parse_str::<syn::TypePath>("<cstr_core::CString>::fmt").unwrap();
-        let first_ident = Guesser::get_first_ident(&full_path).unwrap();
-        assert_eq!(first_ident, "cstr_core");
-    }
-}
-
-
