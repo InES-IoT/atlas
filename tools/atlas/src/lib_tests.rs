@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
     use super::super::*;
-    use crate::sym::{SymbolType, SymbolLang};
+    use crate::sym::{MemoryRegion, SymbolLang, SymbolType};
     use std::io::ErrorKind;
     use lazy_static::lazy_static;
 
@@ -132,6 +132,35 @@ mod tests {
     }
 
     // Shell command:
+    // arm-none-eabi-nm --print-size --size-sort --demangle rust_minimal_node.elf | rg -n "^[[:xdigit:]]{8} [[:xdigit:]]{8} \w .*\$"
+    //
+    // Extract the three largest symbols in the ROM region by hand.
+    #[test]
+    fn filter_memregion() {
+        let mut at =
+            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+        assert!(at.analyze().is_ok());
+        let mut iter = at
+            .syms
+            .iter()
+            .rev()
+            .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
+            .take(3);
+        let s = iter.next().unwrap();
+        assert_eq!(s.addr, 0x000013ec);
+        assert_eq!(s.size, 0x00000780);
+        let s = iter.next().unwrap();
+        assert_eq!(s.sym_type, SymbolType::TextSection);
+        assert_eq!(
+            s.mangled,
+            "shell_process"
+        );
+        let s = iter.next().unwrap();
+        assert_eq!(s.demangled, "memchr::memchr::fallback::memchr");
+        assert_eq!(s.lang, SymbolLang::Rust);
+    }
+
+    // Shell command:
     // arm-none-eabi-nm --print-size --size-sort --demangle rust_minimal_node.elf | rg -n "^[[:xdigit:]]{8} [[:xdigit:]]{8} [tT] .*\$"
     //
     // Get the first and last Rust or C symbol with a size in
@@ -162,5 +191,46 @@ mod tests {
         assert_eq!(s.mangled, "_ZN17compiler_builtins3int19specialized_div_rem11u64_div_rem17h3680578237da87d7E");
         assert_eq!(s.demangled, "compiler_builtins::int::specialized_div_rem::u64_div_rem");
         assert_eq!(s.lang, SymbolLang::Rust);
+    }
+
+    // The values in this test have been determined using the tested methods
+    // themselves and thus could be wrong altogether. However, the test has been
+    // added to check if modification down the line change their outputs.
+    #[test]
+    fn report_lang() {
+        let mut at =
+            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+        assert!(at.analyze().is_ok());
+        let report = at.report_lang();
+        dbg!(&report);
+        assert_eq!(report.size(SymbolLang::Any, MemoryRegion::Both), 364659);
+        assert_eq!(report.size(SymbolLang::C, MemoryRegion::Both), 176808);
+        assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Both), 158870);
+        assert_eq!(report.size(SymbolLang::Rust, MemoryRegion::Both), 28981);
+
+        assert_eq!(report.size(SymbolLang::Any, MemoryRegion::Rom), 270308);
+        assert_eq!(report.size(SymbolLang::C, MemoryRegion::Rom), 112528);
+        assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Rom), 129884);
+        assert_eq!(report.size(SymbolLang::Rust, MemoryRegion::Rom), 27896);
+
+        assert_eq!(report.size(SymbolLang::Any, MemoryRegion::Ram), 94351);
+        assert_eq!(report.size(SymbolLang::C, MemoryRegion::Ram), 64280);
+        assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Ram), 28986);
+        assert_eq!(report.size(SymbolLang::Rust, MemoryRegion::Ram), 1085);
+
+        assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Both) - 100_f64).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::C, MemoryRegion::Both) - 48.48584568).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Both) - 43.56672947).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Both) - 7.947424854).abs() < 1e-8);
+
+        assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Rom) - 100_f64).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::C, MemoryRegion::Rom) - 41.62954852).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Rom) - 48.05037217).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Rom) - 10.32007932).abs() < 1e-8);
+
+        assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Ram) - 100_f64).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::C, MemoryRegion::Ram) - 68.12858369).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Ram) - 30.72145499).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Ram) - 1.149961315).abs() < 1e-8);
     }
 }

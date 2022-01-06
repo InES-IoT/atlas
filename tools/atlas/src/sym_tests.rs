@@ -192,7 +192,7 @@ mod symbol_tests {
         assert_eq!(s.sym_type, SymbolType::TextSection);
         assert_eq!(s.mangled, String::from("mangled_name"));
         assert_eq!(s.demangled, String::from("demangled_name"));
-        assert_eq!(s.lang, SymbolLang::Unknown);
+        assert_eq!(s.lang, SymbolLang::Any);
     }
     
     #[test]
@@ -203,7 +203,7 @@ mod symbol_tests {
         assert_eq!(s.sym_type, SymbolType::TextSection);
         assert_eq!(s.mangled, String::from("mangled_name"));
         assert_eq!(s.demangled, String::from("demangled_name"));
-        assert_eq!(s.lang, SymbolLang::Unknown);
+        assert_eq!(s.lang, SymbolLang::Any);
     }
 
     #[test]
@@ -242,52 +242,57 @@ mod symbol_tests {
     }
 
     #[test]
-    fn set_language() {
-        let mut s = Symbol::from_rawsymbols("00008700 00000064 T mangled_name", "00008700 00000064 T demangled_name").unwrap();
-        assert_eq!(s.addr, 0x00008700);
-        assert_eq!(s.size, 0x00000064);
-        assert_eq!(s.sym_type, SymbolType::TextSection);
-        assert_eq!(s.mangled, String::from("mangled_name"));
-        assert_eq!(s.demangled, String::from("demangled_name"));
-        assert_eq!(s.lang, SymbolLang::Unknown);
-        
-        s.set_language(SymbolLang::Rust);
-        assert_eq!(s.lang, SymbolLang::Rust);
-    }
-
-    #[test]
     fn related() {
-        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 T mangled_name", "00008700 00000064 T demangled_name", SymbolLang::Unknown).unwrap();
+        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 T mangled_name", "00008700 00000064 T demangled_name", SymbolLang::Any).unwrap();
         let lib = Symbol::from_rawsymbols_lang("00000000 00000064 T mangled_name", "00000000 00000064 T demangled_name", SymbolLang::Rust).unwrap();
         assert!(sym.related(&lib));
     }
 
     #[test]
     fn unrelated_mangled() {
-        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 T mangled_name", "00008700 00000064 T demangled_name", SymbolLang::Unknown).unwrap();
+        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 T mangled_name", "00008700 00000064 T demangled_name", SymbolLang::Any).unwrap();
         let lib = Symbol::from_rawsymbols_lang("00000000 00000064 T other_mangled_name", "00000000 00000064 T demangled_name", SymbolLang::Rust).unwrap();
         assert!(!sym.related(&lib));
     }
 
     #[test]
     fn unrelated_demangled() {
-        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 T mangled_name", "00008700 00000064 T demangled_name", SymbolLang::Unknown).unwrap();
+        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 T mangled_name", "00008700 00000064 T demangled_name", SymbolLang::Any).unwrap();
         let lib = Symbol::from_rawsymbols_lang("00000000 00000064 T mangled_name", "00000000 00000064 T other_demangled_name", SymbolLang::Rust).unwrap();
         assert!(!sym.related(&lib));
     }
 
     #[test]
     fn unrelated_type() {
-        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 r mangled_name", "00008700 00000064 r demangled_name", SymbolLang::Unknown).unwrap();
+        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 r mangled_name", "00008700 00000064 r demangled_name", SymbolLang::Any).unwrap();
         let lib = Symbol::from_rawsymbols_lang("00000000 00000064 T mangled_name", "00000000 00000064 T demangled_name", SymbolLang::Rust).unwrap();
         assert!(!sym.related(&lib));
     }
 
     #[test]
     fn unrelated_size() {
-        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 r mangled_name", "00008700 00000064 r demangled_name", SymbolLang::Unknown).unwrap();
+        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 r mangled_name", "00008700 00000064 r demangled_name", SymbolLang::Any).unwrap();
         let lib = Symbol::from_rawsymbols_lang("00000000 00000004 T mangled_name", "00000000 00000004 T demangled_name", SymbolLang::Rust).unwrap();
         assert!(!sym.related(&lib));
+    }
+
+    #[test]
+    fn memory_region() {
+        let mut t = SymbolType::BssSection;
+        assert_eq!(t.mem_region(), MemoryRegion::Ram);
+        t = SymbolType::TextSection;
+        assert_eq!(t.mem_region(), MemoryRegion::Rom);
+        t = SymbolType::ReadOnlyDataSection;
+        assert_eq!(t.mem_region(), MemoryRegion::Ram);
+        t = SymbolType::Weak;
+        assert_eq!(t.mem_region(), MemoryRegion::Rom);
+    }
+
+    #[test]
+    #[should_panic]
+    fn illegal_memory_region() {
+        let t = SymbolType::Global;
+        t.mem_region();
     }
 }
 

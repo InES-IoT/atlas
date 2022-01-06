@@ -4,8 +4,10 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub mod sym;
-use sym::{Symbol, Guesser};
+use sym::{Guesser, MemoryRegion, Symbol, SymbolLang};
 
+pub mod report;
+use report::{MemSize, ReportLang};
 
 #[cfg(test)]
 #[path = "./lib_tests.rs"]
@@ -94,5 +96,47 @@ impl Atlas {
         self.syms.sort_by_key(|s| s.size);
 
         Ok(())
+    }
+
+    pub fn report_lang(&self) -> ReportLang {
+        let c = MemSize {
+          rom: self.syms
+            .iter()
+            .filter(|s| s.lang == SymbolLang::C)
+            .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
+            .fold(0, |acc, s| acc + s.size),
+          ram: self.syms
+            .iter()
+            .filter(|s| s.lang == SymbolLang::C)
+            .filter(|s| s.sym_type.mem_region() == MemoryRegion::Ram)
+            .fold(0, |acc, s| acc + s.size),
+        };
+
+        let cpp = MemSize {
+          rom: self.syms
+            .iter()
+            .filter(|s| s.lang == SymbolLang::Cpp)
+            .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
+            .fold(0, |acc, s| acc + s.size),
+          ram: self.syms
+            .iter()
+            .filter(|s| s.lang == SymbolLang::Cpp)
+            .filter(|s| s.sym_type.mem_region() == MemoryRegion::Ram)
+            .fold(0, |acc, s| acc + s.size),
+        };
+
+        let rust = MemSize {
+          rom: self.syms
+            .iter()
+            .filter(|s| s.lang == SymbolLang::Rust)
+            .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
+            .fold(0, |acc, s| acc + s.size),
+          ram: self.syms
+            .iter()
+            .filter(|s| s.lang == SymbolLang::Rust)
+            .filter(|s| s.sym_type.mem_region() == MemoryRegion::Ram)
+            .fold(0, |acc, s| acc + s.size),
+        };
+        ReportLang::new(c, cpp, rust)
     }
 }

@@ -53,6 +53,14 @@ use std::str::FromStr;
 #[path = "./sym_tests.rs"]
 mod sym_tests;
 
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum MemoryRegion {
+    Unknown,
+    Rom,
+    Ram,
+    Both,
+}
+
 #[derive(PartialEq, Debug)]
 pub enum SymbolType {
     Absolute,
@@ -75,9 +83,19 @@ pub enum SymbolType {
     Unknown,
 }
 
+impl SymbolType {
+    pub fn mem_region(&self) -> MemoryRegion {
+        match *self {
+            Self::TextSection | Self::Weak => MemoryRegion::Rom,
+            Self::BssSection | Self::DataSection | Self::ReadOnlyDataSection => MemoryRegion::Ram,
+            _ => panic!("The memory region for a symbol of type {:?} is unknown!", self),
+        }
+    }
+}
+
 #[derive(PartialEq, Debug)]
 pub enum SymbolLang {
-    Unknown,
+    Any,
     Rust,
     C,
     Cpp,
@@ -217,7 +235,7 @@ impl Symbol {
             sym_type: mangled.sym_type,
             mangled: mangled.name,
             demangled: demangled.name,
-            lang: SymbolLang::Unknown,
+            lang: SymbolLang::Any,
         })
     }
 
@@ -229,10 +247,6 @@ impl Symbol {
         let mut s = Symbol::from_rawsymbols(mangled, demangled)?;
         s.lang = lang;
         Ok(s)
-    }
-
-    pub fn set_language(&mut self, lang: SymbolLang) {
-        self.lang = lang;
     }
 
     pub fn related(&self, other: &Symbol) -> bool {
