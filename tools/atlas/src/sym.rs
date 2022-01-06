@@ -168,12 +168,12 @@ impl TryFrom<&str> for RawSymbol {
 
 #[derive(PartialEq, Debug)]
 pub struct Symbol {
-    addr: u32,
-    size: u32,
-    sym_type: SymbolType,
-    mangled: String,
-    demangled: String,
-    lang: SymbolLang,
+    pub addr: u32,
+    pub size: u32,
+    pub sym_type: SymbolType,
+    pub mangled: String,
+    pub demangled: String,
+    pub lang: SymbolLang,
 }
 
 impl Symbol {
