@@ -1,16 +1,25 @@
 use std::fs::File;
 use std::io;
 use std::path::{Path, PathBuf};
-pub mod sym;
-
 use std::process::Command;
 
+pub mod sym;
+use sym::{Symbol, Guesser};
+
+
+#[cfg(test)]
+#[path = "./lib_tests.rs"]
+mod lib_tests;
+
+// TODO:
+// Compare the performance to using other collections (e.g. HashMap,
+// BTreeMap, Binary Heap)
 #[derive(Debug)]
 pub struct Atlas {
     nm: PathBuf,
     elf: PathBuf,
     lib: PathBuf,
-    syms: Vec<sym::Symbol>,
+    syms: Vec<Symbol>,
     fails: Vec<(String,String)>,
 }
 
@@ -36,7 +45,7 @@ impl Atlas {
     }
 
     pub fn analyze(&mut self) -> io::Result<()> {
-        let mut gsr = sym::Guesser::new();
+        let mut gsr = Guesser::new();
         gsr.add_rust_lib(&self.nm, &self.lib).unwrap();
 
         let mangled_out = Command::new(&self.nm)
@@ -77,83 +86,13 @@ impl Atlas {
             self.syms.push(guess);
         }
 
+        // The symbols *should* already be sorted but the `is_sorted_by_key`
+        // method is not yet stable. Therefore, the symbols are sorted here just
+        // to make sure. The `--size-sort` flag from the nm call should also not
+        // be removed as this gets rid of a lot of symbols that don't have a
+        // size at all (e.g. Kconfigs "00000001 A CONFIG_SHELL").
+        self.syms.sort_by_key(|s| s.size);
+
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::ErrorKind;
-    use lazy_static::lazy_static;
-    lazy_static! {
-        static ref NM_PATH: String = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
-    }
-
-    #[test]
-    fn new_str() {
-        let at = Atlas::new(&*NM_PATH, file!(), file!());
-        assert!(at.is_ok());
-    }
-
-    #[test]
-    fn new_string() {
-        let at = Atlas::new(&*NM_PATH, String::from(file!()), String::from(file!()));
-        assert!(at.is_ok());
-    }
-
-    #[test]
-    fn new_pathbuf() {
-        let at = Atlas::new(&*NM_PATH, PathBuf::from(file!()), PathBuf::from(file!()));
-        assert!(at.is_ok());
-    }
-
-    #[test]
-    fn new_path() {
-        let at = Atlas::new(&*NM_PATH, Path::new(file!()), Path::new(file!()));
-        assert!(at.is_ok());
-    }
-
-    #[test]
-    fn new_mixed() {
-        let at = Atlas::new(&*NM_PATH, PathBuf::from(file!()), file!());
-        assert!(at.is_ok());
-    }
-
-    #[test]
-    fn new_canonicalize() {
-        let at = Atlas::new(&*NM_PATH, "/etc/hostname", "./aux/../src/../Cargo.toml");
-        assert!(at.is_ok());
-    }
-
-    #[test]
-    fn illegal_path() {
-        let err = Atlas::new(&*NM_PATH, "kljsdflkjsdf", "ljksdflkjsdflsj").unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::NotFound);
-    }
-
-    #[test]
-    fn permission_denied() {
-        let err = Atlas::new(&*NM_PATH, file!(), "/etc/shadow").unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::PermissionDenied);
-    }
-
-    #[test]
-    fn nm_wrong_file_type() {
-        let mut at = Atlas::new(&*NM_PATH, "../README.md", "aux/libsecprint.a").unwrap();
-        let err = at.analyze().unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::Other);
-    }
-
-    #[test]
-    fn analyze() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
-        assert!(at.analyze().is_ok());
-        println!("{}", at.syms.len());
-        println!("{}", at.fails.len());
-        println!("{:#?}", at.fails);
-
-        // println!("{:#?}",at.syms);
-    }
-}
-
