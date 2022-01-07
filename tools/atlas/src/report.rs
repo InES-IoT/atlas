@@ -1,5 +1,5 @@
-use crate::sym::{SymbolLang, MemoryRegion};
-use std::ops::Add;
+use crate::sym::{MemoryRegion, Symbol, SymbolLang};
+use std::{fmt::Debug, ops::Add};
 
 #[cfg(test)]
 #[path = "./report_tests.rs"]
@@ -54,5 +54,28 @@ impl ReportLang {
         let size = self.size(lang, mem_type) as f64;
 
         100_f64 * size / sum
+    }
+}
+
+
+pub struct ReportFunc<'a,I>
+where
+    I: Iterator<Item = &'a Symbol> + Clone
+{
+    iter: I,
+}
+
+impl<'a,I> ReportFunc<'a,I>
+where
+    I: Iterator<Item = &'a Symbol> + Clone
+{
+    pub fn new(iter: I) -> ReportFunc<'a,I> {
+        ReportFunc { iter  }
+    }
+
+    pub fn print(&mut self) {
+        for s in self.iter.clone() {
+            println!("{:#?}", s);
+        }
     }
 }

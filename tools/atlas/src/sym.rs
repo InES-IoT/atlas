@@ -61,7 +61,7 @@ pub enum MemoryRegion {
     Both,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum SymbolType {
     Absolute,
     BssSection,
@@ -93,7 +93,7 @@ impl SymbolType {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Clone, Copy)]
 pub enum SymbolLang {
     Any,
     Rust,

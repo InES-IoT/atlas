@@ -233,4 +233,13 @@ mod tests {
         assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Ram) - 30.72145499).abs() < 1e-8);
         assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Ram) - 1.149961315).abs() < 1e-8);
     }
+
+    #[test]
+    fn report_func() {
+        let mut at =
+            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+        assert!(at.analyze().is_ok());
+        let mut report = at.report_func(SymbolLang::Rust, 3);
+        report.print();
+    }
 }

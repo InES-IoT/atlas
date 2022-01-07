@@ -7,7 +7,7 @@ pub mod sym;
 use sym::{Guesser, MemoryRegion, Symbol, SymbolLang};
 
 pub mod report;
-use report::{MemSize, ReportLang};
+use report::{MemSize, ReportLang, ReportFunc};
 
 #[cfg(test)]
 #[path = "./lib_tests.rs"]
@@ -138,5 +138,12 @@ impl Atlas {
             .fold(0, |acc, s| acc + s.size),
         };
         ReportLang::new(c, cpp, rust)
+    }
+
+    pub fn report_func(&self, lang: SymbolLang, count: usize) -> ReportFunc<impl Iterator<Item = &Symbol> + Clone>
+    {
+        let iter = self.syms.iter().filter(move |s| s.lang == lang).take(count);
+
+        ReportFunc::new(iter)
     }
 }
