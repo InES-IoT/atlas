@@ -1,4 +1,7 @@
-use std::fs::File;
+#[macro_use]
+extern crate prettytable;
+
+pub use std::fs::File;
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -140,9 +143,12 @@ impl Atlas {
         ReportLang::new(c, cpp, rust)
     }
 
-    pub fn report_func(&self, lang: SymbolLang, count: usize) -> ReportFunc<impl Iterator<Item = &Symbol> + Clone>
+    pub fn report_func(&self, lang: SymbolLang, mem_type: MemoryRegion, count: usize) -> ReportFunc<impl Iterator<Item = &Symbol> + Clone>
     {
-        let iter = self.syms.iter().filter(move |s| s.lang == lang).take(count);
+        let iter = self.syms.iter().rev();
+        let iter = iter.filter(move |s| (lang == SymbolLang::Any) || (s.lang == lang));
+        let iter = iter.filter(move |s| (mem_type == MemoryRegion::Both) || (s.sym_type.mem_region() == mem_type));
+        let iter = iter.take(count);
 
         ReportFunc::new(iter)
     }

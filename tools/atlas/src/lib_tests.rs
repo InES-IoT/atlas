@@ -239,7 +239,7 @@ mod tests {
         let mut at =
             Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
-        let mut report = at.report_func(SymbolLang::Rust, 3);
+        let mut report = at.report_func(SymbolLang::Any, MemoryRegion::Both, 5);
         report.print();
     }
 }

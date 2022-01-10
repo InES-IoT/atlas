@@ -1,3 +1,5 @@
+use prettytable::{format, Table};
+
 use crate::sym::{MemoryRegion, Symbol, SymbolLang};
 use std::{fmt::Debug, ops::Add};
 
@@ -55,6 +57,31 @@ impl ReportLang {
 
         100_f64 * size / sum
     }
+
+    // HACK!!!!!!
+    // Ewww... yuck....
+    // Get rid of this mess
+    pub fn print(&self, mem_type: MemoryRegion) {
+
+        let mut table = Table::new();
+
+        // TODO:
+        // Rewrite ReportLang to create an iterator to return the information
+        // for all the languages ordered.
+        let mut data = vec![("C", self.size(SymbolLang::C, mem_type), self.size_pct(SymbolLang::C, mem_type)),
+                        ("Cpp", self.size(SymbolLang::Cpp, mem_type), self.size_pct(SymbolLang::Cpp, mem_type)),
+                        ("Rust", self.size(SymbolLang::Rust, mem_type), self.size_pct(SymbolLang::Rust, mem_type))];
+
+        data.sort_by_key(|x| x.1);
+        for x in data.iter().rev() {
+            let _ = table.add_row(row!(x.0, x.1.to_string(), x.2.to_string()));
+        }
+
+        let mem_string = format!("{:?}", &mem_type);
+        table.set_titles(row![&mem_string, "Size", "%age"]);
+        table.set_format(*format::consts::FORMAT_NO_LINESEP_WITH_TITLE);
+        table.printstd();
+    }
 }
 
 
@@ -70,12 +97,20 @@ where
     I: Iterator<Item = &'a Symbol> + Clone
 {
     pub fn new(iter: I) -> ReportFunc<'a,I> {
-        ReportFunc { iter  }
+        ReportFunc { iter }
     }
 
     pub fn print(&mut self) {
+
+        let mut table = Table::new();
+
         for s in self.iter.clone() {
-            println!("{:#?}", s);
+            let lang_str = format!("{:?}", &s.lang);
+            let sym_type_str = format!("{:?}", &s.sym_type);
+            let mem_type_str = format!("{:?}", &s.sym_type.mem_region());
+            let _ = table.add_row(row![&lang_str, &s.demangled, s.size.to_string(), &sym_type_str, &mem_type_str]);
         }
+        table.set_titles(row!["Language", "Name", "Size [Bytes]", "Symbol Type", "Memory Region"]);
+        table.printstd();
     }
 }
