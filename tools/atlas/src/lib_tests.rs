@@ -197,12 +197,12 @@ mod tests {
     // themselves and thus could be wrong altogether. However, the test has been
     // added to check if modification down the line change their outputs.
     #[test]
-    fn report_lang() {
+    fn report_lang_size() {
         let mut at =
             Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
         let report = at.report_lang();
-        dbg!(&report);
+
         assert_eq!(report.size(SymbolLang::Any, MemoryRegion::Both), 364659);
         assert_eq!(report.size(SymbolLang::C, MemoryRegion::Both), 176808);
         assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Both), 158870);
@@ -234,12 +234,46 @@ mod tests {
         assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Ram) - 1.149961315).abs() < 1e-8);
     }
 
+    // See `report_lang_size`.
+    #[test]
+    fn report_lang_size_pct() {
+        let mut at =
+            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+        assert!(at.analyze().is_ok());
+        let report = at.report_lang();
+
+        assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Both) - 100_f64).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::C, MemoryRegion::Both) - 48.48584568).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Both) - 43.56672947).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Both) - 7.947424854).abs() < 1e-8);
+
+        assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Rom) - 100_f64).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::C, MemoryRegion::Rom) - 41.62954852).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Rom) - 48.05037217).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Rom) - 10.32007932).abs() < 1e-8);
+
+        assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Ram) - 100_f64).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::C, MemoryRegion::Ram) - 68.12858369).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Ram) - 30.72145499).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Ram) - 1.149961315).abs() < 1e-8);
+    }
+
     #[test]
     fn report_func() {
         let mut at =
             Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
-        let mut report = at.report_func(SymbolLang::Any, MemoryRegion::Both, 5);
-        report.print();
+        let report = at.report_func(SymbolLang::Any, MemoryRegion::Both, 6);
+        assert_eq!(report.into_iter().count(), 6);
+        let mut iter = report.into_iter();
+        let s = iter.next().unwrap();
+        assert_eq!(s.addr, 0x200016c8);
+        assert_eq!(s.size, 0x000067f0);
+        let s = iter.next().unwrap();
+        assert_eq!(s.sym_type, SymbolType::BssSection);
+        assert_eq!(s.mangled, "z_main_stack");
+        let s = iter.next().unwrap();
+        assert_eq!(s.demangled, "test_arr");
+        assert_eq!(s.lang, SymbolLang::C);
     }
 }

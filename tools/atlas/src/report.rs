@@ -1,7 +1,7 @@
-use prettytable::{format, Table};
+use prettytable::Table;
 
 use crate::sym::{MemoryRegion, Symbol, SymbolLang};
-use std::{fmt::Debug, ops::Add};
+use std::{fmt::Debug, io::{self, Write}, ops::Add};
 
 #[cfg(test)]
 #[path = "./report_tests.rs"]
@@ -61,7 +61,7 @@ impl ReportLang {
     // HACK!!!!!!
     // Ewww... yuck....
     // Get rid of this mess
-    pub fn print(&self, mem_type: MemoryRegion) {
+    pub fn print(&self, mem_type: MemoryRegion, writer: &mut impl Write) -> io::Result<usize> {
 
         let mut table = Table::new();
 
@@ -79,8 +79,7 @@ impl ReportLang {
 
         let mem_string = format!("{:?}", &mem_type);
         table.set_titles(row![&mem_string, "Size", "%age"]);
-        table.set_format(*format::consts::FORMAT_NO_LINESEP_WITH_TITLE);
-        table.printstd();
+        table.print(writer)
     }
 }
 
@@ -100,7 +99,7 @@ where
         ReportFunc { iter }
     }
 
-    pub fn print(&mut self) {
+    pub fn print(&self, writer: &mut impl Write) -> io::Result<usize>  {
 
         let mut table = Table::new();
 
@@ -111,6 +110,38 @@ where
             let _ = table.add_row(row![&lang_str, &s.demangled, s.size.to_string(), &sym_type_str, &mem_type_str]);
         }
         table.set_titles(row!["Language", "Name", "Size [Bytes]", "Symbol Type", "Memory Region"]);
-        table.printstd();
+        table.print(writer)
+    }
+}
+
+impl<'a,I> IntoIterator for &ReportFunc<'a,I>
+where
+    I: Iterator<Item = &'a Symbol> + Clone
+{
+    type Item = I::Item;
+    type IntoIter = ReportFuncIter<'a,I>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        Self::IntoIter {
+            iter: self.iter.clone(),
+        }
+    }
+}
+
+pub struct ReportFuncIter<'a,I>
+where
+    I: Iterator<Item = &'a Symbol> + Clone
+{
+    iter: I
+}
+
+impl<'a,I> Iterator for ReportFuncIter<'a,I>
+where
+    I: Iterator<Item = &'a Symbol> + Clone
+{
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.iter.next()
     }
 }
