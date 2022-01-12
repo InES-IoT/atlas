@@ -61,6 +61,60 @@ pub enum MemoryRegion {
     Both,
 }
 
+impl FromStr for MemoryRegion {
+    type Err = SymbolParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let lower = s.to_lowercase();
+        match lower.as_ref() {
+            "unknown" => Ok( MemoryRegion::Unknown ),
+            "rom" => Ok( MemoryRegion::Rom ),
+            "ram" => Ok( MemoryRegion::Ram ),
+            "both" => Ok( MemoryRegion::Both ),
+            _ => Err(SymbolParseError(())),
+        }
+    }
+}
+
+impl TryFrom<&str> for MemoryRegion {
+    type Error = SymbolParseError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        MemoryRegion::from_str(s)
+    }
+}
+
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum SymbolLang {
+    Any,
+    Rust,
+    C,
+    Cpp,
+}
+
+impl FromStr for SymbolLang {
+    type Err = SymbolParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let lower = s.to_lowercase();
+        match lower.as_ref() {
+            "any" => Ok( SymbolLang::Any ),
+            "c" => Ok( SymbolLang::C ),
+            "cpp" => Ok( SymbolLang::Cpp ),
+            "rust" => Ok( SymbolLang::Rust ),
+            _ => Err(SymbolParseError(())),
+        }
+    }
+}
+
+impl TryFrom<&str> for SymbolLang {
+    type Error = SymbolParseError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        SymbolLang::from_str(s)
+    }
+}
+
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum SymbolType {
     Absolute,
@@ -91,14 +145,6 @@ impl SymbolType {
             _ => panic!("The memory region for a symbol of type {:?} is unknown!", self),
         }
     }
-}
-
-#[derive(PartialEq, Debug, Clone, Copy)]
-pub enum SymbolLang {
-    Any,
-    Rust,
-    C,
-    Cpp,
 }
 
 #[derive(PartialEq, Debug)]

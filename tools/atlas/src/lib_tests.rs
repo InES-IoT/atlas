@@ -263,7 +263,7 @@ mod tests {
         let mut at =
             Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
-        let report = at.report_func(SymbolLang::Any, MemoryRegion::Both, 6);
+        let report = at.report_func(vec![SymbolLang::Any], MemoryRegion::Both, Some(6));
         assert_eq!(report.into_iter().count(), 6);
         let mut iter = report.into_iter();
         let s = iter.next().unwrap();
@@ -276,4 +276,34 @@ mod tests {
         assert_eq!(s.demangled, "test_arr");
         assert_eq!(s.lang, SymbolLang::C);
     }
+
+    #[test]
+    fn report_func_no_maxcount() {
+        let mut at =
+            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+        assert!(at.analyze().is_ok());
+        let report = at.report_func(vec![SymbolLang::Any], MemoryRegion::Both, None);
+        assert_eq!(report.into_iter().count(), 4142);
+    }
+
+    #[test]
+    fn report_func_single_lang() {
+        let mut at =
+            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+        assert!(at.analyze().is_ok());
+        let report = at.report_func(vec![SymbolLang::C], MemoryRegion::Both, None);
+        assert_eq!(report.into_iter().count(), 2193);
+        assert!(report.into_iter().all(|s| s.lang == SymbolLang::C));
+    }
+
+    #[test]
+    fn report_func_double_lang() {
+        let mut at =
+            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+        assert!(at.analyze().is_ok());
+        let report = at.report_func(vec![SymbolLang::C, SymbolLang::Rust], MemoryRegion::Both, None);
+        assert_eq!(report.into_iter().count(), 2514);
+        assert!(!report.into_iter().any(|s| s.lang == SymbolLang::Cpp));
+    }
+
 }

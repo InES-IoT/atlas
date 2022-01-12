@@ -1,3 +1,107 @@
+mod memoryregion_tests {
+    use super::super::*;
+
+    #[test]
+    fn fromstr() {
+        let region = MemoryRegion::from_str("unknown").unwrap();
+        assert_eq!(region, MemoryRegion::Unknown);
+        let region = MemoryRegion::from_str("rom").unwrap();
+        assert_eq!(region, MemoryRegion::Rom);
+        let region = MemoryRegion::from_str("ram").unwrap();
+        assert_eq!(region, MemoryRegion::Ram);
+        let region = MemoryRegion::from_str("both").unwrap();
+        assert_eq!(region, MemoryRegion::Both);
+    }
+
+    #[test]
+    fn fromstr_mixed_case() {
+        let region = MemoryRegion::from_str("UnknOwn").unwrap();
+        assert_eq!(region, MemoryRegion::Unknown);
+        let region = MemoryRegion::from_str("rOm").unwrap();
+        assert_eq!(region, MemoryRegion::Rom);
+        let region = MemoryRegion::from_str("raM").unwrap();
+        assert_eq!(region, MemoryRegion::Ram);
+        let region = MemoryRegion::from_str("boTH").unwrap();
+        assert_eq!(region, MemoryRegion::Both);
+    }
+
+    #[test]
+    fn fromstr_invalid() {
+        let region = MemoryRegion::from_str("invalid");
+        assert!(region.is_err());
+    }
+
+    #[test]
+    fn fromstr_valid_invalid_mixed() {
+        let region = MemoryRegion::from_str("invalid rom invalid");
+        assert!(region.is_err());
+    }
+
+    #[test]
+    fn tryfrom() {
+        let region = MemoryRegion::try_from("rom").unwrap();
+        assert_eq!(region, MemoryRegion::Rom);
+    }
+
+    #[test]
+    fn tryfrom_invalid() {
+        let region = MemoryRegion::try_from("invalid");
+        assert!(region.is_err());
+    }
+}
+
+mod symbollang_tests {
+    use super::super::*;
+
+    #[test]
+    fn fromstr() {
+        let lang = SymbolLang::from_str("any").unwrap();
+        assert_eq!(lang, SymbolLang::Any);
+        let lang = SymbolLang::from_str("c").unwrap();
+        assert_eq!(lang, SymbolLang::C);
+        let lang = SymbolLang::from_str("cpp").unwrap();
+        assert_eq!(lang, SymbolLang::Cpp);
+        let lang = SymbolLang::from_str("rust").unwrap();
+        assert_eq!(lang, SymbolLang::Rust);
+    }
+
+    #[test]
+    fn fromstr_mixed_case() {
+        let lang = SymbolLang::from_str("ANy").unwrap();
+        assert_eq!(lang, SymbolLang::Any);
+        let lang = SymbolLang::from_str("C").unwrap();
+        assert_eq!(lang, SymbolLang::C);
+        let lang = SymbolLang::from_str("cpP").unwrap();
+        assert_eq!(lang, SymbolLang::Cpp);
+        let lang = SymbolLang::from_str("RUST").unwrap();
+        assert_eq!(lang, SymbolLang::Rust);
+    }
+
+    #[test]
+    fn fromstr_invalid() {
+        let lang = SymbolLang::from_str("invalid");
+        assert!(lang.is_err());
+    }
+
+    #[test]
+    fn fromstr_valid_invalid_mixed() {
+        let lang = SymbolLang::from_str("invalidcppinvalid");
+        assert!(lang.is_err());
+    }
+
+    #[test]
+    fn tryfrom() {
+        let lang = SymbolLang::try_from("rust").unwrap();
+        assert_eq!(lang, SymbolLang::Rust);
+    }
+
+    #[test]
+    fn tryfrom_invalid() {
+        let lang = SymbolLang::try_from("invalid");
+        assert!(lang.is_err());
+    }
+}
+
 mod rawsymbol_tests {
     use super::super::*;
 

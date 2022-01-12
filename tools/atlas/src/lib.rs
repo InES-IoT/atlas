@@ -143,12 +143,12 @@ impl Atlas {
         ReportLang::new(c, cpp, rust)
     }
 
-    pub fn report_func(&self, lang: SymbolLang, mem_type: MemoryRegion, count: usize) -> ReportFunc<impl Iterator<Item = &Symbol> + Clone>
+    pub fn report_func(&self, lang: Vec<SymbolLang>, mem_type: MemoryRegion, max_count: Option<usize>) -> ReportFunc<impl Iterator<Item = &Symbol> + Clone>
     {
         let iter = self.syms.iter().rev();
-        let iter = iter.filter(move |s| (lang == SymbolLang::Any) || (s.lang == lang));
+        let iter = iter.filter(move |s| (lang.contains(&SymbolLang::Any)) || (lang.contains(&s.lang)));
         let iter = iter.filter(move |s| (mem_type == MemoryRegion::Both) || (s.sym_type.mem_region() == mem_type));
-        let iter = iter.take(count);
+        let iter = iter.take(if let Some(count) = max_count { count } else { usize::MAX });
 
         ReportFunc::new(iter)
     }

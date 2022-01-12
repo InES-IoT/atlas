@@ -78,7 +78,7 @@ impl ReportLang {
         }
 
         let mem_string = format!("{:?}", &mem_type);
-        table.set_titles(row![&mem_string, "Size", "%age"]);
+        table.set_titles(row![&mem_string, "Size [Bytes]", "%age"]);
         table.print(writer)
     }
 }
