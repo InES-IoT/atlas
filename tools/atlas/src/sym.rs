@@ -137,6 +137,67 @@ pub enum SymbolType {
     Unknown,
 }
 
+impl FromStr for SymbolType {
+    type Err = SymbolParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if s.len() == 1 {
+            match s {
+                "A" => Ok(SymbolType::Absolute),
+                "B" | "b" => Ok(SymbolType::BssSection),
+                "C" | "c" => Ok(SymbolType::Common),
+                "D" | "d" => Ok(SymbolType::DataSection),
+                "G" | "g" => Ok(SymbolType::Global),
+                "I" => Ok(SymbolType::Indirect),
+                "i" => Ok(SymbolType::IndirectFunction),
+                "N" => Ok(SymbolType::Debug),
+                "n" => Ok(SymbolType::ReadOnlyDataSection),
+                "p" => Ok(SymbolType::StackUnwindSection),
+                "R" | "r" => Ok(SymbolType::ReadOnlyDataSection),
+                "S" | "s" => Ok(SymbolType::UninitializedOrZeroInitialized),
+                "T" | "t" => Ok(SymbolType::TextSection),
+                "U" => Ok(SymbolType::Undefined),
+                "u" => Ok(SymbolType::UniqueGlobal),
+                "V" | "v" => Ok(SymbolType::TaggedWeak),
+                "W" | "w" => Ok(SymbolType::Weak),
+                "-" => Ok(SymbolType::Stabs),
+                "?" => Ok(SymbolType::Unknown),
+                _ => return Err(SymbolParseError(())),
+            }
+        } else {
+            match s.to_lowercase().as_ref() {
+                "absolute" => Ok(SymbolType::Absolute),
+                "bsssection" => Ok(SymbolType::BssSection),
+                "common" => Ok(SymbolType::Common),
+                "datasection" => Ok(SymbolType::DataSection),
+                "global" => Ok(SymbolType::Global),
+                "indirect" => Ok(SymbolType::Indirect),
+                "indirectfunction" => Ok(SymbolType::IndirectFunction),
+                "debug" => Ok(SymbolType::Debug),
+                "readonlydatasection" => Ok(SymbolType::ReadOnlyDataSection),
+                "stackunwindsection" => Ok(SymbolType::StackUnwindSection),
+                "uninitializedorzeroinitialized" => Ok(SymbolType::UninitializedOrZeroInitialized),
+                "textsection" => Ok(SymbolType::TextSection),
+                "undefined" => Ok(SymbolType::Undefined),
+                "uniqueglobal" => Ok(SymbolType::UniqueGlobal),
+                "taggedweak" => Ok(SymbolType::TaggedWeak),
+                "weak" => Ok(SymbolType::Weak),
+                "stabs" => Ok(SymbolType::Stabs),
+                "unknown" => Ok(SymbolType::Unknown),
+                _ => return Err(SymbolParseError(())),
+            }
+        }
+    }
+}
+
+impl TryFrom<&str> for SymbolType {
+    type Error = SymbolParseError;
+
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        SymbolType::from_str(s)
+    }
+}
+
 impl SymbolType {
     pub fn mem_region(&self) -> MemoryRegion {
         match *self {
@@ -193,31 +254,9 @@ impl FromStr for RawSymbol {
             .map_err(|_e| SymbolParseError(()))?;
         let size = u32::from_str_radix(caps.get(2).unwrap().as_str(), 16)
             .map_err(|_e| SymbolParseError(()))?;
-
-        let sym_type = match caps.get(3).unwrap().as_str() {
-            "A" => SymbolType::Absolute,
-            "B" | "b" => SymbolType::BssSection,
-            "C" | "c" => SymbolType::Common,
-            "D" | "d" => SymbolType::DataSection,
-            "G" | "g" => SymbolType::Global,
-            "I" => SymbolType::Indirect,
-            "i" => SymbolType::IndirectFunction,
-            "N" => SymbolType::Debug,
-            "n" => SymbolType::ReadOnlyDataSection,
-            "p" => SymbolType::StackUnwindSection,
-            "R" | "r" => SymbolType::ReadOnlyDataSection,
-            "S" | "s" => SymbolType::UninitializedOrZeroInitialized,
-            "T" | "t" => SymbolType::TextSection,
-            "U" => SymbolType::Undefined,
-            "u" => SymbolType::UniqueGlobal,
-            "V" | "v" => SymbolType::TaggedWeak,
-            "W" | "w" => SymbolType::Weak,
-            "-" => SymbolType::Stabs,
-            "?" => SymbolType::Unknown,
-            _ => return Err(SymbolParseError(())),
-        };
-
+        let sym_type = caps.get(3).unwrap().as_str().parse::<SymbolType>()?;
         let name = String::from(caps.get(4).unwrap().as_str());
+
         Ok(RawSymbol::new(addr, size, sym_type, name))
     }
 }

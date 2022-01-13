@@ -50,6 +50,91 @@ mod memoryregion_tests {
     }
 }
 
+mod symboltype_tests {
+    use super::super::*;
+
+    #[test]
+    fn fromstr_acronym() {
+        let sym_type = SymbolType::from_str("g").unwrap();
+        assert_eq!(sym_type, SymbolType::Global);
+        let sym_type = SymbolType::from_str("n").unwrap();
+        assert_eq!(sym_type, SymbolType::ReadOnlyDataSection);
+        let sym_type = SymbolType::from_str("N").unwrap();
+        assert_eq!(sym_type, SymbolType::Debug);
+        let sym_type = SymbolType::from_str("-").unwrap();
+        assert_eq!(sym_type, SymbolType::Stabs);
+    }
+
+    #[test]
+    fn fromstr_acronym_whitespace() {
+        let region = SymbolType::from_str(" t   ");
+        assert!(region.is_err());
+    }
+
+    #[test]
+    fn fromstr_full() {
+        let sym_type = SymbolType::from_str("BssSection").unwrap();
+        assert_eq!(sym_type, SymbolType::BssSection);
+        let sym_type = SymbolType::from_str("TextSection").unwrap();
+        assert_eq!(sym_type, SymbolType::TextSection);
+        let sym_type = SymbolType::from_str("TaggedWeak").unwrap();
+        assert_eq!(sym_type, SymbolType::TaggedWeak);
+    }
+
+    #[test]
+    fn fromstr_full_mixed_case() {
+        let sym_type = SymbolType::from_str("BssSectIoN").unwrap();
+        assert_eq!(sym_type, SymbolType::BssSection);
+        let sym_type = SymbolType::from_str("textSECTION").unwrap();
+        assert_eq!(sym_type, SymbolType::TextSection);
+        let sym_type = SymbolType::from_str("TaGGedWeAk").unwrap();
+        assert_eq!(sym_type, SymbolType::TaggedWeak);
+    }
+
+    #[test]
+    fn fromstr_invalid() {
+        let sym_type = SymbolType::from_str("invalid");
+        assert!(sym_type.is_err());
+    }
+
+    #[test]
+    fn fromstr_valid_invalid_mixed() {
+        let sym_type = SymbolType::from_str("invalid common invalid");
+        assert!(sym_type.is_err());
+    }
+
+    #[test]
+    fn tryfrom_acronym() {
+        let sym_type = SymbolType::try_from("u").unwrap();
+        assert_eq!(sym_type, SymbolType::UniqueGlobal);
+    }
+
+    #[test]
+    fn tryfrom_invalid() {
+        let sym_type = SymbolType::try_from("invalid");
+        assert!(sym_type.is_err());
+    }
+
+    #[test]
+    fn memory_region() {
+        let mut t = SymbolType::BssSection;
+        assert_eq!(t.mem_region(), MemoryRegion::Ram);
+        t = SymbolType::TextSection;
+        assert_eq!(t.mem_region(), MemoryRegion::Rom);
+        t = SymbolType::ReadOnlyDataSection;
+        assert_eq!(t.mem_region(), MemoryRegion::Ram);
+        t = SymbolType::Weak;
+        assert_eq!(t.mem_region(), MemoryRegion::Rom);
+    }
+
+    #[test]
+    #[should_panic]
+    fn illegal_memory_region() {
+        let t = SymbolType::Global;
+        t.mem_region();
+    }
+}
+
 mod symbollang_tests {
     use super::super::*;
 
@@ -378,25 +463,6 @@ mod symbol_tests {
         let sym = Symbol::from_rawsymbols_lang("00008700 00000064 r mangled_name", "00008700 00000064 r demangled_name", SymbolLang::Any).unwrap();
         let lib = Symbol::from_rawsymbols_lang("00000000 00000004 T mangled_name", "00000000 00000004 T demangled_name", SymbolLang::Rust).unwrap();
         assert!(!sym.related(&lib));
-    }
-
-    #[test]
-    fn memory_region() {
-        let mut t = SymbolType::BssSection;
-        assert_eq!(t.mem_region(), MemoryRegion::Ram);
-        t = SymbolType::TextSection;
-        assert_eq!(t.mem_region(), MemoryRegion::Rom);
-        t = SymbolType::ReadOnlyDataSection;
-        assert_eq!(t.mem_region(), MemoryRegion::Ram);
-        t = SymbolType::Weak;
-        assert_eq!(t.mem_region(), MemoryRegion::Rom);
-    }
-
-    #[test]
-    #[should_panic]
-    fn illegal_memory_region() {
-        let t = SymbolType::Global;
-        t.mem_region();
     }
 }
 

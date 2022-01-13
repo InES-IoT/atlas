@@ -1,4 +1,4 @@
-use prettytable::Table;
+use prettytable::{Table, format};
 
 use crate::sym::{MemoryRegion, Symbol, SymbolLang};
 use std::{fmt::Debug, io::{self, Write}, ops::Add};
@@ -58,31 +58,37 @@ impl ReportLang {
         100_f64 * size / sum
     }
 
-    // HACK!!!!!!
-    // Ewww... yuck....
-    // Get rid of this mess
     pub fn print(&self, mem_type: MemoryRegion, writer: &mut impl Write) -> io::Result<usize> {
 
         let mut table = Table::new();
 
-        // TODO:
-        // Rewrite ReportLang to create an iterator to return the information
-        // for all the languages ordered.
-        let mut data = vec![("C", self.size(SymbolLang::C, mem_type), self.size_pct(SymbolLang::C, mem_type)),
-                        ("Cpp", self.size(SymbolLang::Cpp, mem_type), self.size_pct(SymbolLang::Cpp, mem_type)),
-                        ("Rust", self.size(SymbolLang::Rust, mem_type), self.size_pct(SymbolLang::Rust, mem_type))];
-
-        data.sort_by_key(|x| x.1);
-        for x in data.iter().rev() {
-            let _ = table.add_row(row!(x.0, x.1.to_string(), x.2.to_string()));
+        for x in self.iter(mem_type).rev() {
+            // TODO:
+            // Implement Display for SymbolLang to get rid of this line.
+            let lang_string = format!("{:?}", x.0);
+            let _ = table.add_row(row!(lang_string, x.1.to_string(), format!("{:.1}",x.2)));
         }
 
+        // Implement Display for MemoryRegion to get rid of this line.
         let mem_string = format!("{:?}", &mem_type);
         table.set_titles(row![&mem_string, "Size [Bytes]", "%age"]);
+        table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
         table.print(writer)
     }
-}
 
+    // NOTE:
+    // In order to be able to sort something, you HAVE to have all the data.
+    // Therefore, putting everything in a Vec and then sorting it in place is
+    // probably not the stupidest thing to do. However, I'm not sure if it is
+    // a good idea to then turn this vector into a consuming iterator.
+    pub fn iter(&self, mem_type: MemoryRegion) -> std::vec::IntoIter<(SymbolLang, u32, f64)> {
+        let mut data = vec![(SymbolLang::C, self.size(SymbolLang::C, mem_type), self.size_pct(SymbolLang::C, mem_type)),
+                            (SymbolLang::Cpp, self.size(SymbolLang::Cpp, mem_type), self.size_pct(SymbolLang::Cpp, mem_type)),
+                            (SymbolLang::Rust, self.size(SymbolLang::Rust, mem_type), self.size_pct(SymbolLang::Rust, mem_type))];
+        data.sort_by_key(|x| x.1);
+        data.into_iter()
+    }
+}
 
 pub struct ReportFunc<'a,I>
 where
@@ -110,6 +116,7 @@ where
             let _ = table.add_row(row![&lang_str, &s.demangled, s.size.to_string(), &sym_type_str, &mem_type_str]);
         }
         table.set_titles(row!["Language", "Name", "Size [Bytes]", "Symbol Type", "Memory Region"]);
+        table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
         table.print(writer)
     }
 }
