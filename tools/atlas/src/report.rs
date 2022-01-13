@@ -1,5 +1,5 @@
+use bytesize::ByteSize;
 use prettytable::{Table, format};
-
 use crate::sym::{MemoryRegion, Symbol, SymbolLang};
 use std::{fmt::Debug, io::{self, Write}, ops::Add};
 
@@ -8,12 +8,21 @@ use std::{fmt::Debug, io::{self, Write}, ops::Add};
 mod report_tests;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct MemSize {
-    pub rom: u32,
-    pub ram: u32,
+pub struct TotalMem {
+    rom: ByteSize,
+    ram: ByteSize,
 }
 
-impl Add for MemSize {
+impl TotalMem {
+    pub fn new(rom: u64, ram: u64) -> Self {
+        TotalMem {
+            rom: ByteSize::b(rom),
+            ram: ByteSize::b(ram),
+        }
+    }
+}
+
+impl Add for TotalMem {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
@@ -25,18 +34,18 @@ impl Add for MemSize {
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct ReportLang {
-    c: MemSize,
-    cpp: MemSize,
-    rust: MemSize,
+pub struct LangReport {
+    c: TotalMem,
+    cpp: TotalMem,
+    rust: TotalMem,
 }
 
-impl ReportLang {
-    pub fn new(c: MemSize, cpp: MemSize, rust: MemSize) -> Self {
-        ReportLang { c, cpp, rust }
+impl LangReport {
+    pub fn new(c: TotalMem, cpp: TotalMem, rust: TotalMem) -> Self {
+        LangReport { c, cpp, rust }
     }
 
-    pub fn size(&self, lang: SymbolLang, mem_type: MemoryRegion) -> u32 {
+    pub fn size(&self, lang: SymbolLang, mem_type: MemoryRegion) -> ByteSize {
         let mem = match lang {
             SymbolLang::C => self.c,
             SymbolLang::Cpp => self.cpp,
@@ -52,13 +61,13 @@ impl ReportLang {
     }
 
     pub fn size_pct(&self, lang: SymbolLang, mem_type: MemoryRegion) -> f64 {
-        let sum = self.size(SymbolLang::Any, mem_type) as f64;
-        let size = self.size(lang, mem_type) as f64;
+        let sum = self.size(SymbolLang::Any, mem_type).as_u64() as f64;
+        let size = self.size(lang, mem_type).as_u64() as f64;
 
         100_f64 * size / sum
     }
 
-    pub fn print(&self, mem_type: MemoryRegion, writer: &mut impl Write) -> io::Result<usize> {
+    pub fn print(&self, mem_type: MemoryRegion, human_readable: bool, writer: &mut impl Write) -> io::Result<usize> {
 
         let mut table = Table::new();
 
@@ -66,7 +75,12 @@ impl ReportLang {
             // TODO:
             // Implement Display for SymbolLang to get rid of this line.
             let lang_string = format!("{:?}", x.0);
-            let _ = table.add_row(row!(lang_string, x.1.to_string(), format!("{:.1}",x.2)));
+            let size_string = if human_readable {
+                x.1.to_string_as(true)
+            } else {
+                x.1.as_u64().to_string()
+            };
+            let _ = table.add_row(row!(lang_string, size_string, format!("{:.1}",x.2)));
         }
 
         // Implement Display for MemoryRegion to get rid of this line.
@@ -81,7 +95,7 @@ impl ReportLang {
     // Therefore, putting everything in a Vec and then sorting it in place is
     // probably not the stupidest thing to do. However, I'm not sure if it is
     // a good idea to then turn this vector into a consuming iterator.
-    pub fn iter(&self, mem_type: MemoryRegion) -> std::vec::IntoIter<(SymbolLang, u32, f64)> {
+    pub fn iter(&self, mem_type: MemoryRegion) -> std::vec::IntoIter<(SymbolLang, ByteSize, f64)> {
         let mut data = vec![(SymbolLang::C, self.size(SymbolLang::C, mem_type), self.size_pct(SymbolLang::C, mem_type)),
                             (SymbolLang::Cpp, self.size(SymbolLang::Cpp, mem_type), self.size_pct(SymbolLang::Cpp, mem_type)),
                             (SymbolLang::Rust, self.size(SymbolLang::Rust, mem_type), self.size_pct(SymbolLang::Rust, mem_type))];
@@ -90,30 +104,35 @@ impl ReportLang {
     }
 }
 
-pub struct ReportFunc<'a,I>
+pub struct FuncReport<'a,I>
 where
     I: Iterator<Item = &'a Symbol> + Clone
 {
     iter: I,
 }
 
-impl<'a,I> ReportFunc<'a,I>
+impl<'a,I> FuncReport<'a,I>
 where
     I: Iterator<Item = &'a Symbol> + Clone
 {
-    pub fn new(iter: I) -> ReportFunc<'a,I> {
-        ReportFunc { iter }
+    pub fn new(iter: I) -> FuncReport<'a,I> {
+        FuncReport { iter }
     }
 
-    pub fn print(&self, writer: &mut impl Write) -> io::Result<usize>  {
+    pub fn print(&self, human_readable: bool, writer: &mut impl Write) -> io::Result<usize>  {
 
         let mut table = Table::new();
 
         for s in self.iter.clone() {
-            let lang_str = format!("{:?}", &s.lang);
-            let sym_type_str = format!("{:?}", &s.sym_type);
-            let mem_type_str = format!("{:?}", &s.sym_type.mem_region());
-            let _ = table.add_row(row![&lang_str, &s.demangled, s.size.to_string(), &sym_type_str, &mem_type_str]);
+            let lang_string = format!("{:?}", &s.lang);
+            let sym_type_string = format!("{:?}", &s.sym_type);
+            let mem_type_string = format!("{:?}", &s.sym_type.mem_region());
+            let size_string = if human_readable {
+                ByteSize::b(s.size as u64).to_string_as(true)
+            } else {
+                s.size.to_string()
+            };
+            let _ = table.add_row(row![&lang_string, &s.demangled, &size_string, &sym_type_string, &mem_type_string]);
         }
         table.set_titles(row!["Language", "Name", "Size [Bytes]", "Symbol Type", "Memory Region"]);
         table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
@@ -121,7 +140,7 @@ where
     }
 }
 
-impl<'a,I> IntoIterator for &ReportFunc<'a,I>
+impl<'a,I> IntoIterator for &FuncReport<'a,I>
 where
     I: Iterator<Item = &'a Symbol> + Clone
 {

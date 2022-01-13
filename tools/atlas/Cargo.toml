@@ -12,6 +12,7 @@ name = "atlas"
 path = "src/lib.rs"
 
 [dependencies]
+bytesize = "1.1.0"
 clap = { version = "3.0.6", features = ["derive"] }
 lazy_static = "1.4.0"
 prettytable-rs = "0.8.0"

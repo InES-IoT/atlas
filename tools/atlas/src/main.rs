@@ -38,6 +38,10 @@ struct Args {
     /// Print a size summary of the languages.
     #[clap(short, long)]
     summary: bool,
+
+    /// Print memory sizes in human readable format.
+    #[clap(long)]
+    human: bool,
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -52,10 +56,10 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     if args.summary {
         let lang_rep = at.report_lang();
-        lang_rep.print(region, &mut std::io::stdout())?;
+        lang_rep.print(region, args.human, &mut std::io::stdout())?;
     } else {
         let func_rep = at.report_func(lang, region, args.count);
-        func_rep.print(&mut std::io::stdout())?;
+        func_rep.print(args.human, &mut std::io::stdout())?;
     }
 
     Ok(())

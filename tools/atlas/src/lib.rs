@@ -10,7 +10,7 @@ pub mod sym;
 use sym::{Guesser, MemoryRegion, Symbol, SymbolLang};
 
 pub mod report;
-use report::{MemSize, ReportLang, ReportFunc};
+use report::{TotalMem, LangReport, FuncReport};
 
 #[cfg(test)]
 #[path = "./lib_tests.rs"]
@@ -101,55 +101,55 @@ impl Atlas {
         Ok(())
     }
 
-    pub fn report_lang(&self) -> ReportLang {
-        let c = MemSize {
-          rom: self.syms
+    pub fn report_lang(&self) -> LangReport {
+        let c = TotalMem::new(
+          self.syms
             .iter()
             .filter(|s| s.lang == SymbolLang::C)
             .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
-            .fold(0, |acc, s| acc + s.size),
-          ram: self.syms
+            .fold(0, |acc, s| acc + s.size as u64),
+          self.syms
             .iter()
             .filter(|s| s.lang == SymbolLang::C)
             .filter(|s| s.sym_type.mem_region() == MemoryRegion::Ram)
-            .fold(0, |acc, s| acc + s.size),
-        };
+            .fold(0, |acc, s| acc + s.size as u64),
+        );
 
-        let cpp = MemSize {
-          rom: self.syms
-            .iter()
-            .filter(|s| s.lang == SymbolLang::Cpp)
-            .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
-            .fold(0, |acc, s| acc + s.size),
-          ram: self.syms
-            .iter()
-            .filter(|s| s.lang == SymbolLang::Cpp)
-            .filter(|s| s.sym_type.mem_region() == MemoryRegion::Ram)
-            .fold(0, |acc, s| acc + s.size),
-        };
+        let cpp = TotalMem::new(
+            self.syms
+                .iter()
+                .filter(|s| s.lang == SymbolLang::Cpp)
+                .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
+                .fold(0, |acc, s| acc + s.size as u64),
+            self.syms
+                .iter()
+                .filter(|s| s.lang == SymbolLang::Cpp)
+                .filter(|s| s.sym_type.mem_region() == MemoryRegion::Ram)
+                .fold(0, |acc, s| acc + s.size as u64),
+        );
 
-        let rust = MemSize {
-          rom: self.syms
-            .iter()
-            .filter(|s| s.lang == SymbolLang::Rust)
-            .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
-            .fold(0, |acc, s| acc + s.size),
-          ram: self.syms
-            .iter()
-            .filter(|s| s.lang == SymbolLang::Rust)
-            .filter(|s| s.sym_type.mem_region() == MemoryRegion::Ram)
-            .fold(0, |acc, s| acc + s.size),
-        };
-        ReportLang::new(c, cpp, rust)
+        let rust = TotalMem::new(
+            self.syms
+                .iter()
+                .filter(|s| s.lang == SymbolLang::Rust)
+                .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
+                .fold(0, |acc, s| acc + s.size as u64),
+            self.syms
+                .iter()
+                .filter(|s| s.lang == SymbolLang::Rust)
+                .filter(|s| s.sym_type.mem_region() == MemoryRegion::Ram)
+                .fold(0, |acc, s| acc + s.size as u64),
+        );
+        LangReport::new(c, cpp, rust)
     }
 
-    pub fn report_func(&self, lang: Vec<SymbolLang>, mem_type: MemoryRegion, max_count: Option<usize>) -> ReportFunc<impl Iterator<Item = &Symbol> + Clone>
+    pub fn report_func(&self, lang: Vec<SymbolLang>, mem_type: MemoryRegion, max_count: Option<usize>) -> FuncReport<impl Iterator<Item = &Symbol> + Clone>
     {
         let iter = self.syms.iter().rev();
         let iter = iter.filter(move |s| (lang.contains(&SymbolLang::Any)) || (lang.contains(&s.lang)));
         let iter = iter.filter(move |s| (mem_type == MemoryRegion::Both) || (s.sym_type.mem_region() == mem_type));
         let iter = iter.take(if let Some(count) = max_count { count } else { usize::MAX });
 
-        ReportFunc::new(iter)
+        FuncReport::new(iter)
     }
 }
