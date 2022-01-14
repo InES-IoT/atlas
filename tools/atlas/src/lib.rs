@@ -6,6 +6,8 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+pub mod error;
+
 pub mod sym;
 use sym::{Guesser, MemoryRegion, Symbol, SymbolLang};
 
