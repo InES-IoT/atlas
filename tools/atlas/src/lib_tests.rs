@@ -2,7 +2,6 @@
 mod tests {
     use super::super::*;
     use crate::sym::{MemoryRegion, SymbolLang, SymbolType};
-    use std::io::ErrorKind;
     use lazy_static::lazy_static;
 
     lazy_static! {
@@ -48,20 +47,20 @@ mod tests {
     #[test]
     fn illegal_path() {
         let err = Atlas::new(&*NM_PATH, "kljsdflkjsdf", "ljksdflkjsdflsj").unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::NotFound);
+        assert_eq!(err.kind(), ErrorKind::Io);
     }
 
     #[test]
     fn permission_denied() {
         let err = Atlas::new(&*NM_PATH, file!(), "/etc/shadow").unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::PermissionDenied);
+        assert_eq!(err.kind(), ErrorKind::Io);
     }
 
     #[test]
     fn nm_wrong_file_type() {
         let mut at = Atlas::new(&*NM_PATH, "../README.md", "aux/libsecprint.a").unwrap();
         let err = at.analyze().unwrap_err();
-        assert_eq!(err.kind(), ErrorKind::Other);
+        assert_eq!(err.kind(), ErrorKind::Nm);
     }
 
     #[test]

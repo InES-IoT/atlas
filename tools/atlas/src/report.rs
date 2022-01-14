@@ -1,7 +1,8 @@
 use bytesize::ByteSize;
 use prettytable::{Table, format};
+use crate::error::{Error, ErrorKind};
 use crate::sym::{MemoryRegion, Symbol, SymbolLang};
-use std::{fmt::Debug, io::{self, Write}, ops::Add};
+use std::{fmt::Debug, io::Write, ops::Add};
 
 #[cfg(test)]
 #[path = "./report_tests.rs"]
@@ -67,7 +68,7 @@ impl LangReport {
         100_f64 * size / sum
     }
 
-    pub fn print(&self, mem_type: MemoryRegion, human_readable: bool, writer: &mut impl Write) -> io::Result<usize> {
+    pub fn print(&self, mem_type: MemoryRegion, human_readable: bool, writer: &mut impl Write) -> Result<usize, Error> {
 
         let mut table = Table::new();
 
@@ -87,7 +88,7 @@ impl LangReport {
         let mem_string = format!("{:?}", &mem_type);
         table.set_titles(row![&mem_string, "Size [Bytes]", "%age"]);
         table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
-        table.print(writer)
+        table.print(writer).map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))
     }
 
     // NOTE:
@@ -119,7 +120,7 @@ where
         FuncReport { iter }
     }
 
-    pub fn print(&self, human_readable: bool, writer: &mut impl Write) -> io::Result<usize>  {
+    pub fn print(&self, human_readable: bool, writer: &mut impl Write) -> Result<usize, Error>  {
 
         let mut table = Table::new();
 
@@ -136,7 +137,7 @@ where
         }
         table.set_titles(row!["Language", "Name", "Size [Bytes]", "Symbol Type", "Memory Region"]);
         table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
-        table.print(writer)
+        table.print(writer).map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))
     }
 }
 

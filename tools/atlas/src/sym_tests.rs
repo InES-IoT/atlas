@@ -216,15 +216,15 @@ mod rawsymbol_tests {
     #[test]
     fn fromstr_empty() {
         let s = RawSymbol::from_str("");
-        assert!(s.is_err());
-        assert_eq!(s.unwrap_err(), SymbolParseError(()));
+        let err = s.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     }
 
     #[test]
     fn fromstr_whitespace() {
         let s = RawSymbol::from_str("   ");
-        assert!(s.is_err());
-        assert_eq!(s.unwrap_err(), SymbolParseError(()));
+        let err = s.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     }
 
     #[test]
@@ -305,36 +305,36 @@ mod rawsymbol_tests {
     #[test]
     fn fromstr_invalid_addr() {
         let s = RawSymbol::from_str("000K08700 00000064 T net_if_up");
-        assert!(s.is_err());
-        assert_eq!(s.unwrap_err(), SymbolParseError(()));
+        let err = s.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     }
 
     #[test]
     fn fromstr_invalid_size() {
         let s = RawSymbol::from_str("00008700 m0000064 T net_if_up");
-        assert!(s.is_err());
-        assert_eq!(s.unwrap_err(), SymbolParseError(()));
+        let err = s.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     }
 
     #[test]
     fn fromstr_invalid_type() {
         let s = RawSymbol::from_str("00008700 00000064 X net_if_up");
-        assert!(s.is_err());
-        assert_eq!(s.unwrap_err(), SymbolParseError(()));
+        let err = s.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     }
 
     #[test]
     fn fromstr_missing_name() {
         let s = RawSymbol::from_str("00008700 00000064 T");
-        assert!(s.is_err());
-        assert_eq!(s.unwrap_err(), SymbolParseError(()));
+        let err = s.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     }
 
     #[test]
     fn fromstr_too_many_type_chars() {
         let s = RawSymbol::from_str("00008700 00000064 Tt net_if_up");
-        assert!(s.is_err());
-        assert_eq!(s.unwrap_err(), SymbolParseError(()));
+        let err = s.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     }
 
     #[test]
@@ -398,25 +398,29 @@ mod symbol_tests {
     #[test]
     fn from_rawsymbols_invalid_addr() {
         let s = Symbol::from_rawsymbols("00008700 00000064 T mangled_name", "00000000 00000064 T demangled_name");
-        assert!(s.is_err());
+        let err = s.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     }
 
     #[test]
     fn from_rawsymbols_invalid_size() {
         let s = Symbol::from_rawsymbols("00008700 00000064 T mangled_name", "00008700 00000000 T demangled_name");
-        assert!(s.is_err());
+        let err = s.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     }
 
     #[test]
     fn from_rawsymbols_invalid_type() {
         let s = Symbol::from_rawsymbols("00008700 00000064 T mangled_name", "00008700 00000064 a demangled_name");
-        assert!(s.is_err());
+        let err = s.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     }
 
     #[test]
     fn from_rawsymbols_invalid_symbols() {
         let s = Symbol::from_rawsymbols("0000870T mangled_name", "000000000064 a demangled_name");
-        assert!(s.is_err());
+        let err = s.unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     }
 
     #[test]

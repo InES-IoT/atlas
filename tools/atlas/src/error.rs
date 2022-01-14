@@ -6,9 +6,11 @@ use std::fmt;
 mod error_tests;
 
 // Should this be marked as non-exhaustive?
-#[derive(PartialEq, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ErrorKind {
     InvalidSymbol,
+    InvalidEnumStr,
+    Nm,
     Io,
 }
 
@@ -35,8 +37,8 @@ impl Error {
         self
     }
 
-    pub fn kind(&self) -> &ErrorKind {
-        &self.kind
+    pub fn kind(&self) -> ErrorKind {
+        self.kind
     }
 
     pub fn into_cause(self) -> Option<Box<dyn StdError + Send + Sync>> {

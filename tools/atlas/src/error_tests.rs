@@ -5,14 +5,14 @@ mod error_tests {
     #[test]
     fn new() {
         let e = Error::new(ErrorKind::InvalidSymbol);
-        assert_eq!(e.kind(), &ErrorKind::InvalidSymbol);
+        assert_eq!(e.kind(), ErrorKind::InvalidSymbol);
     }
 
     #[test]
     fn with() {
         let io_error = io::Error::new(io::ErrorKind::PermissionDenied, "Permission denied!");
         let atlas_error = Error::new(ErrorKind::Io).with(io_error);
-        assert_eq!(atlas_error.kind(), &ErrorKind::Io);
+        assert_eq!(atlas_error.kind(), ErrorKind::Io);
         let cause = atlas_error.into_cause().unwrap();
         assert_eq!(cause.to_string(), "Permission denied!");
 
@@ -25,7 +25,7 @@ mod error_tests {
     fn downcast() {
         let io_error = io::Error::new(io::ErrorKind::PermissionDenied, "Permission denied!");
         let atlas_error = Error::new(ErrorKind::Io).with(io_error);
-        assert_eq!(atlas_error.kind(), &ErrorKind::Io);
+        assert_eq!(atlas_error.kind(), ErrorKind::Io);
         let cause = atlas_error.into_cause().unwrap();
         let original_error = cause.downcast::<io::Error>().unwrap();
         assert_eq!(original_error.kind(), io::ErrorKind::PermissionDenied);

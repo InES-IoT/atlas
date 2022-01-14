@@ -39,11 +39,10 @@
 //! https://itanium-cxx-abi.github.io/cxx-abi/abi.html#mangling
 //!
 
+use crate::error::{Error, ErrorKind};
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::convert::{TryFrom, TryInto};
-use std::error::Error;
-use std::fmt;
 use std::fmt::Debug;
 use std::path::Path;
 use std::process::Command;
@@ -62,7 +61,7 @@ pub enum MemoryRegion {
 }
 
 impl FromStr for MemoryRegion {
-    type Err = SymbolParseError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let lower = s.to_lowercase();
@@ -71,13 +70,13 @@ impl FromStr for MemoryRegion {
             "rom" => Ok( MemoryRegion::Rom ),
             "ram" => Ok( MemoryRegion::Ram ),
             "both" => Ok( MemoryRegion::Both ),
-            _ => Err(SymbolParseError(())),
+            _ => Err(Error::new(ErrorKind::InvalidEnumStr)),
         }
     }
 }
 
 impl TryFrom<&str> for MemoryRegion {
-    type Error = SymbolParseError;
+    type Error = Error;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         MemoryRegion::from_str(s)
@@ -93,7 +92,7 @@ pub enum SymbolLang {
 }
 
 impl FromStr for SymbolLang {
-    type Err = SymbolParseError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let lower = s.to_lowercase();
@@ -102,13 +101,13 @@ impl FromStr for SymbolLang {
             "c" => Ok( SymbolLang::C ),
             "cpp" => Ok( SymbolLang::Cpp ),
             "rust" => Ok( SymbolLang::Rust ),
-            _ => Err(SymbolParseError(())),
+            _ => Err(Error::new(ErrorKind::InvalidEnumStr)),
         }
     }
 }
 
 impl TryFrom<&str> for SymbolLang {
-    type Error = SymbolParseError;
+    type Error = Error;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         SymbolLang::from_str(s)
@@ -138,7 +137,7 @@ pub enum SymbolType {
 }
 
 impl FromStr for SymbolType {
-    type Err = SymbolParseError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.len() == 1 {
@@ -162,7 +161,7 @@ impl FromStr for SymbolType {
                 "W" | "w" => Ok(SymbolType::Weak),
                 "-" => Ok(SymbolType::Stabs),
                 "?" => Ok(SymbolType::Unknown),
-                _ => return Err(SymbolParseError(())),
+                _ => return Err(Error::new(ErrorKind::InvalidEnumStr)),
             }
         } else {
             match s.to_lowercase().as_ref() {
@@ -184,14 +183,14 @@ impl FromStr for SymbolType {
                 "weak" => Ok(SymbolType::Weak),
                 "stabs" => Ok(SymbolType::Stabs),
                 "unknown" => Ok(SymbolType::Unknown),
-                _ => return Err(SymbolParseError(())),
+                _ => return Err(Error::new(ErrorKind::InvalidEnumStr)),
             }
         }
     }
 }
 
 impl TryFrom<&str> for SymbolType {
-    type Error = SymbolParseError;
+    type Error = Error;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         SymbolType::from_str(s)
@@ -203,6 +202,12 @@ impl SymbolType {
         match *self {
             Self::TextSection | Self::Weak => MemoryRegion::Rom,
             Self::BssSection | Self::DataSection | Self::ReadOnlyDataSection => MemoryRegion::Ram,
+            // FIXME:
+            // Eventually, this should be replaced with by returning a result
+            // type. However, for the meantime, let this be a panic to determine
+            // during the development phase of this tool, if there are other
+            // symbols that could be present in an ELF file. (I assume that some
+            // symbol types should never make it to the finally linked ELF file.)
             _ => panic!("The memory region for a symbol of type {:?} is unknown!", self),
         }
     }
@@ -239,7 +244,7 @@ impl RawSymbol {
 }
 
 impl FromStr for RawSymbol {
-    type Err = SymbolParseError;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         lazy_static! {
@@ -248,13 +253,14 @@ impl FromStr for RawSymbol {
                     .unwrap();
         }
 
-        let caps = RE.captures(s).ok_or(SymbolParseError(()))?;
+        let caps = RE.captures(s).ok_or(Error::new(ErrorKind::InvalidSymbol))?;
 
         let addr = u32::from_str_radix(caps.get(1).unwrap().as_str(), 16)
-            .map_err(|_e| SymbolParseError(()))?;
+            .map_err(|_e| Error::new(ErrorKind::InvalidSymbol))?;
         let size = u32::from_str_radix(caps.get(2).unwrap().as_str(), 16)
-            .map_err(|_e| SymbolParseError(()))?;
-        let sym_type = caps.get(3).unwrap().as_str().parse::<SymbolType>()?;
+            .map_err(|_e| Error::new(ErrorKind::InvalidSymbol))?;
+        let sym_type = caps.get(3).unwrap().as_str().parse::<SymbolType>()
+            .map_err(|_e| Error::new(ErrorKind::InvalidSymbol))?;
         let name = String::from(caps.get(4).unwrap().as_str());
 
         Ok(RawSymbol::new(addr, size, sym_type, name))
@@ -262,7 +268,7 @@ impl FromStr for RawSymbol {
 }
 
 impl TryFrom<&str> for RawSymbol {
-    type Error = SymbolParseError;
+    type Error = Error;
 
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         RawSymbol::from_str(s)
@@ -291,27 +297,31 @@ impl Symbol {
         }
     }
 
-    pub fn from_rawsymbols<T>(mangled: T, demangled: T) -> Result<Self, SymbolParseError>
+    pub fn from_rawsymbols<T>(mangled: T, demangled: T) -> Result<Self, Error>
     where
         T: TryInto<RawSymbol>,
     {
+        // TODO:
+        // Check this again with the ? operator.
+        //
+        // Old comment:
         // Didn't get the `?` operator to work because of trait requirements
         // revolving around `SymbolParseError`.
         let mangled = match mangled.try_into() {
             Ok(mangled) => mangled,
-            Err(_) => return Err(SymbolParseError(())),
+            Err(_) => return Err(Error::new(ErrorKind::InvalidSymbol)),
         };
 
         let demangled = match demangled.try_into() {
             Ok(demangled) => demangled,
-            Err(_) => return Err(SymbolParseError(())),
+            Err(_) => return Err(Error::new(ErrorKind::InvalidSymbol)),
         };
 
         if (mangled.addr != demangled.addr)
             || (mangled.size != demangled.size)
             || (mangled.sym_type != demangled.sym_type)
         {
-            return Err(SymbolParseError(()));
+            return Err(Error::new(ErrorKind::InvalidSymbol));
         }
 
         Ok(Symbol {
@@ -325,7 +335,7 @@ impl Symbol {
     }
 
     // Maybe not needed...?
-    pub fn from_rawsymbols_lang<T>(mangled: T, demangled: T, lang: SymbolLang) -> Result<Self, SymbolParseError>
+    pub fn from_rawsymbols_lang<T>(mangled: T, demangled: T, lang: SymbolLang) -> Result<Self, Error>
     where
         T: TryInto<RawSymbol>,
     {
@@ -354,7 +364,7 @@ impl Guesser {
         Default::default()
     }
 
-    pub fn add_rust_lib<T, U>(&mut self, nm: T, lib: U) -> Result<(), SymbolParseError>
+    pub fn add_rust_lib<T, U>(&mut self, nm: T, lib: U) -> Result<(), Error>
     where
         T: AsRef<Path>,
         U: AsRef<Path>,
@@ -363,28 +373,28 @@ impl Guesser {
             .arg("--print-size")
             .arg(lib.as_ref())
             .output()
-            .map_err(|_e| SymbolParseError(()))?;
+            .map_err(|io_error| Error::new(ErrorKind::Nm).with(io_error))?;
 
         if !mangled_out.status.success() {
-            return Err(SymbolParseError(()));
+            return Err(Error::new(ErrorKind::Nm));
         }
 
         let mangled_str =
-            std::str::from_utf8(&mangled_out.stdout).map_err(|_e| SymbolParseError(()))?;
+            std::str::from_utf8(&mangled_out.stdout).map_err(|str_error| Error::new(ErrorKind::Nm).with(str_error))?;
 
         let demangled_out = Command::new(nm.as_ref())
             .arg("--print-size")
             .arg("--demangle")
             .arg(lib.as_ref())
             .output()
-            .map_err(|_e| SymbolParseError(()))?;
+            .map_err(|io_error| Error::new(ErrorKind::Nm).with(io_error))?;
 
         if !demangled_out.status.success() {
-            return Err(SymbolParseError(()));
+            return Err(Error::new(ErrorKind::Nm));
         }
 
         let demangled_str =
-            std::str::from_utf8(&demangled_out.stdout).map_err(|_e| SymbolParseError(()))?;
+            std::str::from_utf8(&demangled_out.stdout).map_err(|str_error| Error::new(ErrorKind::Nm).with(str_error))?;
 
         for (mangled, demangled) in mangled_str.lines().zip(demangled_str.lines()) {
             let s = match Symbol::from_rawsymbols_lang(mangled,demangled, SymbolLang::Rust) {
@@ -420,7 +430,7 @@ impl Guesser {
         Ok(())
     }
 
-    pub fn guess<T>(&self, mangled: T, demangled: T) -> Result<Symbol, SymbolParseError>
+    pub fn guess<T>(&self, mangled: T, demangled: T) -> Result<Symbol, Error>
     where
         T: TryInto<RawSymbol>,
     {
@@ -436,19 +446,5 @@ impl Guesser {
             }
         }
         Ok(sym)
-    }
-}
-
-// TODO:
-// Rewrite this as a generic atlas error and implement an ErrorKind enum for
-// specifying the type of error (including an error message).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SymbolParseError(());
-
-impl Error for SymbolParseError {}
-
-impl fmt::Display for SymbolParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "invalid symbol syntax")
     }
 }

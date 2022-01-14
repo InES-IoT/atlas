@@ -2,11 +2,11 @@
 extern crate prettytable;
 
 pub use std::fs::File;
-use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub mod error;
+use error::{Error, ErrorKind};
 
 pub mod sym;
 use sym::{Guesser, MemoryRegion, Symbol, SymbolLang};
@@ -31,7 +31,12 @@ pub struct Atlas {
 }
 
 impl Atlas {
-    pub fn new<N,E,L>(nm: N, elf: E, lib: L) -> io::Result<Self>
+    // TODO:
+    // Check if some from trait could be implemented for this crate's Error type
+    // to get rid of the .map_err() calls. Otherwhise, a private helper function
+    // could be created to handle the the canonicalizing and permission
+    // checking. The return of this method could then only call .map_err() once.
+    pub fn new<N,E,L>(nm: N, elf: E, lib: L) -> Result<Self, Error>
     where
         N: AsRef<Path>,
         E: AsRef<Path>,
@@ -39,19 +44,25 @@ impl Atlas {
     {
         let curr = std::env::current_dir().unwrap();
 
-        let nm = curr.join(nm.as_ref()).canonicalize()?;
-        let elf = curr.join(elf.as_ref()).canonicalize()?;
-        let lib = curr.join(lib.as_ref()).canonicalize()?;
+        let nm = curr.join(nm.as_ref()).canonicalize()
+            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
+        let elf = curr.join(elf.as_ref()).canonicalize()
+            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
+        let lib = curr.join(lib.as_ref()).canonicalize()
+            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
 
         // Check permission by opening and closing files
-        let _ = File::open(&nm)?;
-        let _ = File::open(&elf)?;
-        let _ = File::open(&lib)?;
+        let _ = File::open(&nm)
+            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
+        let _ = File::open(&elf)
+            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
+        let _ = File::open(&lib)
+            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
 
         Ok(Atlas { nm, elf, lib, syms: Vec::new(), fails: Vec::new() })
     }
 
-    pub fn analyze(&mut self) -> io::Result<()> {
+    pub fn analyze(&mut self) -> Result<(), Error> {
         let mut gsr = Guesser::new();
         gsr.add_rust_lib(&self.nm, &self.lib).unwrap();
 
@@ -59,28 +70,30 @@ impl Atlas {
             .arg("--print-size")
             .arg("--size-sort")
             .arg(&self.elf)
-            .output()?;
+            .output()
+            .map_err(|io_error| Error::new(ErrorKind::Nm).with(io_error))?;
 
         if !mangled_out.status.success() {
-            return Err(io::Error::new(io::ErrorKind::Other, "nm returned an error"));
+            return Err(Error::new(ErrorKind::Nm));
         }
 
         let mangled_str = std::str::from_utf8(&mangled_out.stdout)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            .map_err(|str_error| Error::new(ErrorKind::Nm).with(str_error))?;
 
         let demangled_out = Command::new(&self.nm)
             .arg("--print-size")
             .arg("--size-sort")
             .arg("--demangle")
             .arg(&self.elf)
-            .output()?;
+            .output()
+            .map_err(|io_error| Error::new(ErrorKind::Nm).with(io_error))?;
 
         if !demangled_out.status.success() {
-            return Err(io::Error::new(io::ErrorKind::Other, "nm returned an error"));
+            return Err(Error::new(ErrorKind::Nm));
         }
 
         let demangled_str = std::str::from_utf8(&demangled_out.stdout)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+            .map_err(|str_error| Error::new(ErrorKind::Nm).with(str_error))?;
 
         for (mangled, demangled) in mangled_str.lines().zip(demangled_str.lines()) {
             let guess = match gsr.guess(mangled, demangled) {
