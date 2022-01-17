@@ -46,7 +46,6 @@ struct Args {
 
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
-    println!("{:#?}", &args);
 
     let region = args.region.to_lowercase().as_str().parse::<MemoryRegion>()?;
     let lang = args.lang.iter().map(|l| l.to_lowercase().as_str().parse::<SymbolLang>()).collect::<Result<Vec<_>,_>>()?;
