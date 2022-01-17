@@ -12,6 +12,7 @@ pub enum ErrorKind {
     InvalidEnumStr,
     Nm,
     Io,
+    TableFormat,
 }
 
 // TODO:
