@@ -323,6 +323,9 @@ impl Guesser {
         Default::default()
     }
 
+    // FIXME:
+    // The name implies that the method only adds a rust library. However, the
+    // signature also requires the path to the NM executable.
     pub fn add_rust_lib<T, U>(&mut self, nm: T, lib: U) -> Result<(), Error>
     where
         T: AsRef<Path>,

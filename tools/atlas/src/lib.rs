@@ -6,13 +6,13 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub mod error;
-use error::{Error, ErrorKind};
+pub use error::{Error, ErrorKind};
 
 pub mod sym;
-use sym::{Guesser, MemoryRegion, Symbol, SymbolLang};
+pub use sym::{Guesser, MemoryRegion, RawSymbol, Symbol, SymbolLang, SymbolType};
 
 pub mod report;
-use report::{TotalMem, LangReport, FuncReport};
+pub use report::{TotalMem, LangReport, FuncReport};
 
 #[cfg(test)]
 #[path = "./lib_tests.rs"]
@@ -23,11 +23,11 @@ mod lib_tests;
 // BTreeMap, Binary Heap)
 #[derive(Debug)]
 pub struct Atlas {
-    nm: PathBuf,
-    elf: PathBuf,
-    lib: PathBuf,
-    syms: Vec<Symbol>,
-    fails: Vec<(String,String)>,
+    pub nm: PathBuf,
+    pub elf: PathBuf,
+    pub lib: PathBuf,
+    pub syms: Vec<Symbol>,
+    pub fails: Vec<(String,String)>,
 }
 
 impl Atlas {
