@@ -7,6 +7,8 @@ use std::path::PathBuf;
 /// Atlas analyzes an ELF binary and analyzes the memory usage in regards to
 /// languages (C, Cpp, Rust), memory regions (e.g. ROM, RAM), and memory
 /// sections (e.g. BSS section, read-only data section, text section).
+// TODO:
+// Add a flag to select symbol types (i.e. show me all symbols in BSS)
 #[derive(Debug, Parser)]
 #[clap(about, author, version)]
 struct Args {
