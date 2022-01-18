@@ -207,30 +207,15 @@ mod tests {
         assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Both).as_u64(), 158870);
         assert_eq!(report.size(SymbolLang::Rust, MemoryRegion::Both).as_u64(), 28981);
 
-        assert_eq!(report.size(SymbolLang::Any, MemoryRegion::Rom).as_u64(), 270308);
-        assert_eq!(report.size(SymbolLang::C, MemoryRegion::Rom).as_u64(), 112528);
-        assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Rom).as_u64(), 129884);
-        assert_eq!(report.size(SymbolLang::Rust, MemoryRegion::Rom).as_u64(), 27896);
+        assert_eq!(report.size(SymbolLang::Any, MemoryRegion::Rom).as_u64(), 287316);
+        assert_eq!(report.size(SymbolLang::C, MemoryRegion::Rom).as_u64(), 126789);
+        assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Rom).as_u64(), 131546);
+        assert_eq!(report.size(SymbolLang::Rust, MemoryRegion::Rom).as_u64(), 28981);
 
-        assert_eq!(report.size(SymbolLang::Any, MemoryRegion::Ram).as_u64(), 94351);
-        assert_eq!(report.size(SymbolLang::C, MemoryRegion::Ram).as_u64(), 64280);
-        assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Ram).as_u64(), 28986);
-        assert_eq!(report.size(SymbolLang::Rust, MemoryRegion::Ram).as_u64(), 1085);
-
-        assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Both) - 100_f64).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::C, MemoryRegion::Both) - 48.48584568).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Both) - 43.56672947).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Both) - 7.947424854).abs() < 1e-8);
-
-        assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Rom) - 100_f64).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::C, MemoryRegion::Rom) - 41.62954852).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Rom) - 48.05037217).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Rom) - 10.32007932).abs() < 1e-8);
-
-        assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Ram) - 100_f64).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::C, MemoryRegion::Ram) - 68.12858369).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Ram) - 30.72145499).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Ram) - 1.149961315).abs() < 1e-8);
+        assert_eq!(report.size(SymbolLang::Any, MemoryRegion::Ram).as_u64(), 77343);
+        assert_eq!(report.size(SymbolLang::C, MemoryRegion::Ram).as_u64(), 50019);
+        assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Ram).as_u64(), 27324);
+        assert_eq!(report.size(SymbolLang::Rust, MemoryRegion::Ram).as_u64(), 0);
     }
 
     // See `report_lang_size`.
@@ -247,14 +232,14 @@ mod tests {
         assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Both) - 7.947424854).abs() < 1e-8);
 
         assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Rom) - 100_f64).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::C, MemoryRegion::Rom) - 41.62954852).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Rom) - 48.05037217).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Rom) - 10.32007932).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::C, MemoryRegion::Rom) - 44.12876415).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Rom) - 45.78443247).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Rom) - 10.08680338).abs() < 1e-8);
 
         assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Ram) - 100_f64).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::C, MemoryRegion::Ram) - 68.12858369).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Ram) - 30.72145499).abs() < 1e-8);
-        assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Ram) - 1.149961315).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::C, MemoryRegion::Ram) - 64.67165742).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Ram) - 35.32834258).abs() < 1e-8);
+        assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Ram) - 0_f64).abs() < 1e-8);
     }
 
     #[test]

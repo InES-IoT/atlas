@@ -240,8 +240,8 @@ impl SymbolType {
     /// `Result<Self, Error>`.
     pub fn mem_region(&self) -> MemoryRegion {
         match *self {
-            Self::TextSection | Self::Weak => MemoryRegion::Rom,
-            Self::BssSection | Self::DataSection | Self::ReadOnlyDataSection => MemoryRegion::Ram,
+            Self::ReadOnlyDataSection | Self::TextSection | Self::Weak => MemoryRegion::Rom,
+            Self::BssSection | Self::DataSection => MemoryRegion::Ram,
             // FIXME:
             // Eventually, this should be replaced with by returning a result
             // type. However, for the meantime, let this be a panic to determine

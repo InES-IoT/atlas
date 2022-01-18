@@ -122,7 +122,7 @@ mod symboltype_tests {
         t = SymbolType::TextSection;
         assert_eq!(t.mem_region(), MemoryRegion::Rom);
         t = SymbolType::ReadOnlyDataSection;
-        assert_eq!(t.mem_region(), MemoryRegion::Ram);
+        assert_eq!(t.mem_region(), MemoryRegion::Rom);
         t = SymbolType::Weak;
         assert_eq!(t.mem_region(), MemoryRegion::Rom);
     }
