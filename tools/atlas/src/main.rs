@@ -1,5 +1,5 @@
-use atlas::Atlas;
 use atlas::sym::{MemoryRegion, SymbolLang};
+use atlas::Atlas;
 use clap::Parser;
 use std::error::Error;
 use std::path::PathBuf;
@@ -49,8 +49,16 @@ struct Args {
 fn main() -> Result<(), Box<dyn Error>> {
     let args = Args::parse();
 
-    let region = args.region.to_lowercase().as_str().parse::<MemoryRegion>()?;
-    let lang = args.lang.iter().map(|l| l.to_lowercase().as_str().parse::<SymbolLang>()).collect::<Result<Vec<_>,_>>()?;
+    let region = args
+        .region
+        .to_lowercase()
+        .as_str()
+        .parse::<MemoryRegion>()?;
+    let lang = args
+        .lang
+        .iter()
+        .map(|l| l.to_lowercase().as_str().parse::<SymbolLang>())
+        .collect::<Result<Vec<_>, _>>()?;
 
     let mut at = Atlas::new(&args.nm, &args.elf, &args.lib)?;
     at.analyze()?;

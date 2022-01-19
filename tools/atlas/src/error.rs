@@ -38,8 +38,8 @@ pub struct Error {
 }
 
 impl Error {
-    /// Creates an error of a specific kind. Can be chained with [`Error::with`] to add
-    /// an underlying cause.
+    /// Creates an error of a specific kind. Can be chained with [`Error::with`]
+    /// to add an underlying cause.
     pub(crate) fn new(kind: ErrorKind) -> Self {
         Self { kind, cause: None }
     }
@@ -78,7 +78,11 @@ impl StdError for Error {}
 
 impl fmt::Debug for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Atlas error (kind: {:?}, cause: {:?})", self.kind, self.cause)
+        write!(
+            f,
+            "Atlas error (kind: {:?}, cause: {:?})",
+            self.kind, self.cause
+        )
     }
 }
 

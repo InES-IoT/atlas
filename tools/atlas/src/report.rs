@@ -1,10 +1,10 @@
 //! Create reports on the memory usage of languages and/or functions after
 //! analysis of the ELF binary.
 
-use bytesize::ByteSize;
-use prettytable::{Cell, Row, Table, format};
 use crate::error::{Error, ErrorKind};
 use crate::sym::{MemoryRegion, Symbol, SymbolLang};
+use bytesize::ByteSize;
+use prettytable::{format, Cell, Row, Table};
 use std::{fmt::Debug, io::Write, ops::Add};
 
 #[cfg(test)]
@@ -112,8 +112,12 @@ impl LangReport {
     /// ```ignore
     /// report.print(MemoryRegion::Ram, true, &mut std::io::stdout())?;
     /// ```
-    pub fn print(&self, mem_type: MemoryRegion, human_readable: bool, writer: &mut impl Write) -> Result<usize, Error> {
-
+    pub fn print(
+        &self,
+        mem_type: MemoryRegion,
+        human_readable: bool,
+        writer: &mut impl Write,
+    ) -> Result<usize, Error> {
         let mut table = Table::new();
 
         for x in self.iter(mem_type).rev() {
@@ -125,14 +129,18 @@ impl LangReport {
             } else {
                 x.1.as_u64().to_string()
             };
-            let _ = table.add_row(row!(lang_string, size_string, format!("{:.1}",x.2)));
+            let _ = table.add_row(
+                row!(lang_string, size_string, format!("{:.1}", x.2))
+            );
         }
 
         // Implement Display for MemoryRegion to get rid of this line.
         let mem_string = format!("{:?}", &mem_type);
         table.set_titles(row![&mem_string, "Size [Bytes]", "%age"]);
         table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
-        table.print(writer).map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))
+        table
+            .print(writer)
+            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))
     }
 
     /// Creates an iterator which returns a tuple for every language containing
@@ -141,15 +149,32 @@ impl LangReport {
     /// according to the size with the smallest being the first. Use the
     /// `.rev()` method on the iterator if you want it to start with the largest
     /// one.
-    pub fn iter(&self, mem_type: MemoryRegion) -> std::vec::IntoIter<(SymbolLang, ByteSize, f64)> {
+    pub fn iter(
+        &self,
+        mem_type: MemoryRegion
+    ) -> std::vec::IntoIter<(SymbolLang, ByteSize, f64)> {
         // NOTE:
         // In order to be able to sort something, you HAVE to have all the data.
         // Therefore, putting everything in a Vec and then sorting it in place is
         // is probably not the stupidest thing to do. However, I'm not sure if
         // it is a good idea to then turn this vector into a consuming iterator.
-        let mut data = vec![(SymbolLang::C, self.size(SymbolLang::C, mem_type), self.size_pct(SymbolLang::C, mem_type)),
-                            (SymbolLang::Cpp, self.size(SymbolLang::Cpp, mem_type), self.size_pct(SymbolLang::Cpp, mem_type)),
-                            (SymbolLang::Rust, self.size(SymbolLang::Rust, mem_type), self.size_pct(SymbolLang::Rust, mem_type))];
+        let mut data = vec![
+            (
+                SymbolLang::C,
+                self.size(SymbolLang::C, mem_type),
+                self.size_pct(SymbolLang::C, mem_type),
+            ),
+            (
+                SymbolLang::Cpp,
+                self.size(SymbolLang::Cpp, mem_type),
+                self.size_pct(SymbolLang::Cpp, mem_type),
+            ),
+            (
+                SymbolLang::Rust,
+                self.size(SymbolLang::Rust, mem_type),
+                self.size_pct(SymbolLang::Rust, mem_type),
+            ),
+        ];
         data.sort_by_key(|x| x.1);
         data.into_iter()
     }
@@ -159,22 +184,22 @@ impl LangReport {
 /// Will probably be renamed to `SymbolReport` in a future release.
 // TODO:
 // This should probably be renamed to SymbolReport.
-pub struct FuncReport<'a,I>
+pub struct FuncReport<'a, I>
 where
-    I: Iterator<Item = &'a Symbol> + Clone
+    I: Iterator<Item = &'a Symbol> + Clone,
 {
     iter: I,
 }
 
-impl<'a,I> FuncReport<'a,I>
+impl<'a, I> FuncReport<'a, I>
 where
-    I: Iterator<Item = &'a Symbol> + Clone
+    I: Iterator<Item = &'a Symbol> + Clone,
 {
     /// Creates a new [`FuncReport`].
     /// This type is intended to be created by the `Atlas::report_func` method
     /// which creates an iterator with filters applied to narrow down the
     /// contained symbols.
-    pub fn new(iter: I) -> FuncReport<'a,I> {
+    pub fn new(iter: I) -> FuncReport<'a, I> {
         FuncReport { iter }
     }
 
@@ -190,13 +215,26 @@ where
     /// of lines printed which is bubbled up in case of success. However, the
     /// terminal might be so narrow,  that even wrapping the `name` row is not
     /// enough. In this case, an error is returned ([`ErrorKind::TableFormat`]).
-    pub fn print(&self, human_readable: bool, writer: &mut impl Write) -> Result<usize, Error>  {
+    pub fn print(
+        &self,
+        human_readable: bool,
+        writer: &mut impl Write
+    ) -> Result<usize, Error> {
         const WRAPPED_COLUMN: usize = 1;
 
         let mut table = Table::new();
 
-        let title_arr = ["Language", "Name", "Size [Bytes]", "Symbol Type", "Memory Region"];
-        let mut max_widths = title_arr.iter().map(|s| s.len()).collect::<Vec<usize>>();
+        let title_arr = [
+            "Language",
+            "Name",
+            "Size [Bytes]",
+            "Symbol Type",
+            "Memory Region",
+        ];
+        let mut max_widths = title_arr
+            .iter()
+            .map(|s| s.len())
+            .collect::<Vec<usize>>();
 
         for s in self.iter.clone() {
             let mut strings = Vec::new();
@@ -220,10 +258,16 @@ where
             // Cell::get_content returns a string of its content. Maybe this
             // could be used to iterate over an already assembled table and get
             // the max widths.
-            let current_widths = strings.iter().map(|s| s.len()).collect::<Vec<usize>>();
+            let current_widths = strings
+                .iter()
+                .map(|s| s.len())
+                .collect::<Vec<usize>>();
 
             // Keep track of the largest width for each corresponding column.
-            max_widths.iter_mut().zip(current_widths).for_each(|(acc, x)| *acc = std::cmp::max(*acc,x));
+            max_widths
+                .iter_mut()
+                .zip(current_widths)
+                .for_each(|(acc, x)| *acc = std::cmp::max(*acc, x));
 
             let _ = table.add_row(Row::from(strings.into_iter()));
         }
@@ -247,24 +291,33 @@ where
             // Column separators
             .and_then(|w| w.checked_sub(max_widths.len() - 1))
             // All the text widths except the column that will be wrapped.
-            .and_then(|w| w.checked_sub(max_widths.iter().sum::<usize>() - max_widths[WRAPPED_COLUMN]))
+            .and_then(|w| {
+                w.checked_sub(
+                    max_widths.iter().sum::<usize>() - max_widths[WRAPPED_COLUMN]
+                )
+            })
             .ok_or_else(|| Error::new(ErrorKind::TableFormat))?;
 
         for r in &mut table {
-            let new_cell = Cell::new(&textwrap::fill(&r[WRAPPED_COLUMN].get_content(), remaining_width));
+            let new_cell = Cell::new(&textwrap::fill(
+                &r[WRAPPED_COLUMN].get_content(),
+                remaining_width,
+            ));
             let _ = std::mem::replace(&mut r[WRAPPED_COLUMN], new_cell);
         }
 
-        table.print(writer).map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))
+        table
+            .print(writer)
+            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))
     }
 }
 
-impl<'a,I> IntoIterator for &FuncReport<'a,I>
+impl<'a, I> IntoIterator for &FuncReport<'a, I>
 where
-    I: Iterator<Item = &'a Symbol> + Clone
+    I: Iterator<Item = &'a Symbol> + Clone,
 {
     type Item = I::Item;
-    type IntoIter = ReportFuncIter<'a,I>;
+    type IntoIter = ReportFuncIter<'a, I>;
 
     fn into_iter(self) -> Self::IntoIter {
         Self::IntoIter {
@@ -273,16 +326,16 @@ where
     }
 }
 
-pub struct ReportFuncIter<'a,I>
+pub struct ReportFuncIter<'a, I>
 where
-    I: Iterator<Item = &'a Symbol> + Clone
+    I: Iterator<Item = &'a Symbol> + Clone,
 {
-    iter: I
+    iter: I,
 }
 
-impl<'a,I> Iterator for ReportFuncIter<'a,I>
+impl<'a, I> Iterator for ReportFuncIter<'a, I>
 where
-    I: Iterator<Item = &'a Symbol> + Clone
+    I: Iterator<Item = &'a Symbol> + Clone,
 {
     type Item = I::Item;
 

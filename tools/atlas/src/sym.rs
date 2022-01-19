@@ -33,10 +33,10 @@ impl FromStr for MemoryRegion {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let lower = s.to_lowercase();
         match lower.as_ref() {
-            "unknown" => Ok( MemoryRegion::Unknown ),
-            "rom" => Ok( MemoryRegion::Rom ),
-            "ram" => Ok( MemoryRegion::Ram ),
-            "both" => Ok( MemoryRegion::Both ),
+            "unknown" => Ok(MemoryRegion::Unknown),
+            "rom" => Ok(MemoryRegion::Rom),
+            "ram" => Ok(MemoryRegion::Ram),
+            "both" => Ok(MemoryRegion::Both),
             _ => Err(Error::new(ErrorKind::InvalidEnumStr)),
         }
     }
@@ -67,10 +67,10 @@ impl FromStr for SymbolLang {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let lower = s.to_lowercase();
         match lower.as_ref() {
-            "any" => Ok( SymbolLang::Any ),
-            "c" => Ok( SymbolLang::C ),
-            "cpp" => Ok( SymbolLang::Cpp ),
-            "rust" => Ok( SymbolLang::Rust ),
+            "any" => Ok(SymbolLang::Any),
+            "c" => Ok(SymbolLang::C),
+            "cpp" => Ok(SymbolLang::Cpp),
+            "rust" => Ok(SymbolLang::Rust),
             _ => Err(Error::new(ErrorKind::InvalidEnumStr)),
         }
     }
@@ -248,7 +248,10 @@ impl SymbolType {
             // during the development phase of this tool, if there are other
             // symbols that could be present in an ELF file. (I assume that some
             // symbol types should never make it to the finally linked ELF file.)
-            _ => panic!("The memory region for a symbol of type {:?} is unknown!", self),
+            _ => panic!(
+                "The memory region for a symbol of type {:?} is unknown!",
+                self
+            ),
         }
     }
 }
@@ -292,8 +295,7 @@ impl FromStr for RawSymbol {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         lazy_static! {
             static ref RE: Regex =
-                Regex::new(r"^\s*([0-9a-fA-F]{8})\s+([0-9a-fA-F]{8})\s+(\S)\s+(.*?)\s*$")
-                    .unwrap();
+                Regex::new(r"^\s*([0-9a-fA-F]{8})\s+([0-9a-fA-F]{8})\s+(\S)\s+(.*?)\s*$").unwrap();
         }
 
         let caps = RE.captures(s).ok_or(Error::new(ErrorKind::InvalidSymbol))?;
@@ -302,7 +304,11 @@ impl FromStr for RawSymbol {
             .map_err(|_e| Error::new(ErrorKind::InvalidSymbol))?;
         let size = u32::from_str_radix(caps.get(2).unwrap().as_str(), 16)
             .map_err(|_e| Error::new(ErrorKind::InvalidSymbol))?;
-        let sym_type = caps.get(3).unwrap().as_str().parse::<SymbolType>()
+        let sym_type = caps
+            .get(3)
+            .unwrap()
+            .as_str()
+            .parse::<SymbolType>()
             .map_err(|_e| Error::new(ErrorKind::InvalidSymbol))?;
         let name = String::from(caps.get(4).unwrap().as_str());
 
@@ -332,7 +338,14 @@ pub struct Symbol {
 
 impl Symbol {
     /// Creates a new [`Symbol`].
-    pub fn new(addr: u32, size: u32, sym_type: SymbolType, mangled: String, demangled: String, lang: SymbolLang) -> Self {
+    pub fn new(
+        addr: u32,
+        size: u32,
+        sym_type: SymbolType,
+        mangled: String,
+        demangled: String,
+        lang: SymbolLang,
+    ) -> Self {
         Symbol {
             addr,
             size,
@@ -405,7 +418,11 @@ impl Symbol {
     /// set manually.
     ///
     /// [`from_rawsymbols`]: Symbol::from_rawsymbols
-    pub fn from_rawsymbols_lang<T>(mangled: T, demangled: T, lang: SymbolLang) -> Result<Self, Error>
+    pub fn from_rawsymbols_lang<T>(
+        mangled: T,
+        demangled: T,
+        lang: SymbolLang,
+    ) -> Result<Self, Error>
     where
         T: TryInto<RawSymbol>,
     {
@@ -478,8 +495,8 @@ impl Guesser {
             return Err(Error::new(ErrorKind::Nm));
         }
 
-        let mangled_str =
-            std::str::from_utf8(&mangled_out.stdout).map_err(|str_error| Error::new(ErrorKind::Nm).with(str_error))?;
+        let mangled_str = std::str::from_utf8(&mangled_out.stdout)
+            .map_err(|str_error| Error::new(ErrorKind::Nm).with(str_error))?;
 
         let demangled_out = Command::new(nm.as_ref())
             .arg("--print-size")
@@ -492,11 +509,11 @@ impl Guesser {
             return Err(Error::new(ErrorKind::Nm));
         }
 
-        let demangled_str =
-            std::str::from_utf8(&demangled_out.stdout).map_err(|str_error| Error::new(ErrorKind::Nm).with(str_error))?;
+        let demangled_str = std::str::from_utf8(&demangled_out.stdout)
+            .map_err(|str_error| Error::new(ErrorKind::Nm).with(str_error))?;
 
         for (mangled, demangled) in mangled_str.lines().zip(demangled_str.lines()) {
-            let s = match Symbol::from_rawsymbols_lang(mangled,demangled, SymbolLang::Rust) {
+            let s = match Symbol::from_rawsymbols_lang(mangled, demangled, SymbolLang::Rust) {
                 Ok(s) => s,
                 // TODO:
                 // Differentiate between the various reasons for an error. Some

@@ -267,8 +267,9 @@ mod rawsymbol_tests {
 
     #[test]
     fn fromstr_generic_func() {
-        let s =
-            RawSymbol::from_str("0002ea9e    0000001c T core::ptr::drop_in_place<cstr_core::CString>");
+        let s = RawSymbol::from_str(
+            "0002ea9e    0000001c T core::ptr::drop_in_place<cstr_core::CString>",
+        );
         assert!(s.is_ok());
         let s = s.unwrap();
         assert_eq!(s.addr, 0x0002ea9e);
@@ -383,10 +384,14 @@ mod symbol_tests {
         assert_eq!(s.demangled, String::from("demangled_name"));
         assert_eq!(s.lang, SymbolLang::Any);
     }
-    
+
     #[test]
     fn from_rawsymbols_strs() {
-        let s = Symbol::from_rawsymbols("00008700 00000064 T mangled_name", "00008700 00000064 T demangled_name").unwrap();
+        let s = Symbol::from_rawsymbols(
+            "00008700 00000064 T mangled_name",
+            "00008700 00000064 T demangled_name",
+        )
+        .unwrap();
         assert_eq!(s.addr, 0x00008700);
         assert_eq!(s.size, 0x00000064);
         assert_eq!(s.sym_type, SymbolType::TextSection);
@@ -397,21 +402,30 @@ mod symbol_tests {
 
     #[test]
     fn from_rawsymbols_invalid_addr() {
-        let s = Symbol::from_rawsymbols("00008700 00000064 T mangled_name", "00000000 00000064 T demangled_name");
+        let s = Symbol::from_rawsymbols(
+            "00008700 00000064 T mangled_name",
+            "00000000 00000064 T demangled_name",
+        );
         let err = s.unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     }
 
     #[test]
     fn from_rawsymbols_invalid_size() {
-        let s = Symbol::from_rawsymbols("00008700 00000064 T mangled_name", "00008700 00000000 T demangled_name");
+        let s = Symbol::from_rawsymbols(
+            "00008700 00000064 T mangled_name",
+            "00008700 00000000 T demangled_name",
+        );
         let err = s.unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     }
 
     #[test]
     fn from_rawsymbols_invalid_type() {
-        let s = Symbol::from_rawsymbols("00008700 00000064 T mangled_name", "00008700 00000064 a demangled_name");
+        let s = Symbol::from_rawsymbols(
+            "00008700 00000064 T mangled_name",
+            "00008700 00000064 a demangled_name",
+        );
         let err = s.unwrap_err();
         assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     }
@@ -425,7 +439,12 @@ mod symbol_tests {
 
     #[test]
     fn from_rawsymbols_lang() {
-        let s = Symbol::from_rawsymbols_lang("00008700 00000064 T mangled_name", "00008700 00000064 T demangled_name", SymbolLang::Rust).unwrap();
+        let s = Symbol::from_rawsymbols_lang(
+            "00008700 00000064 T mangled_name",
+            "00008700 00000064 T demangled_name",
+            SymbolLang::Rust,
+        )
+        .unwrap();
         assert_eq!(s.addr, 0x00008700);
         assert_eq!(s.size, 0x00000064);
         assert_eq!(s.sym_type, SymbolType::TextSection);
@@ -436,36 +455,86 @@ mod symbol_tests {
 
     #[test]
     fn related() {
-        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 T mangled_name", "00008700 00000064 T demangled_name", SymbolLang::Any).unwrap();
-        let lib = Symbol::from_rawsymbols_lang("00000000 00000064 T mangled_name", "00000000 00000064 T demangled_name", SymbolLang::Rust).unwrap();
+        let sym = Symbol::from_rawsymbols_lang(
+            "00008700 00000064 T mangled_name",
+            "00008700 00000064 T demangled_name",
+            SymbolLang::Any,
+        )
+        .unwrap();
+        let lib = Symbol::from_rawsymbols_lang(
+            "00000000 00000064 T mangled_name",
+            "00000000 00000064 T demangled_name",
+            SymbolLang::Rust,
+        )
+        .unwrap();
         assert!(sym.related(&lib));
     }
 
     #[test]
     fn unrelated_mangled() {
-        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 T mangled_name", "00008700 00000064 T demangled_name", SymbolLang::Any).unwrap();
-        let lib = Symbol::from_rawsymbols_lang("00000000 00000064 T other_mangled_name", "00000000 00000064 T demangled_name", SymbolLang::Rust).unwrap();
+        let sym = Symbol::from_rawsymbols_lang(
+            "00008700 00000064 T mangled_name",
+            "00008700 00000064 T demangled_name",
+            SymbolLang::Any,
+        )
+        .unwrap();
+        let lib = Symbol::from_rawsymbols_lang(
+            "00000000 00000064 T other_mangled_name",
+            "00000000 00000064 T demangled_name",
+            SymbolLang::Rust,
+        )
+        .unwrap();
         assert!(!sym.related(&lib));
     }
 
     #[test]
     fn unrelated_demangled() {
-        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 T mangled_name", "00008700 00000064 T demangled_name", SymbolLang::Any).unwrap();
-        let lib = Symbol::from_rawsymbols_lang("00000000 00000064 T mangled_name", "00000000 00000064 T other_demangled_name", SymbolLang::Rust).unwrap();
+        let sym = Symbol::from_rawsymbols_lang(
+            "00008700 00000064 T mangled_name",
+            "00008700 00000064 T demangled_name",
+            SymbolLang::Any,
+        )
+        .unwrap();
+        let lib = Symbol::from_rawsymbols_lang(
+            "00000000 00000064 T mangled_name",
+            "00000000 00000064 T other_demangled_name",
+            SymbolLang::Rust,
+        )
+        .unwrap();
         assert!(!sym.related(&lib));
     }
 
     #[test]
     fn unrelated_type() {
-        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 r mangled_name", "00008700 00000064 r demangled_name", SymbolLang::Any).unwrap();
-        let lib = Symbol::from_rawsymbols_lang("00000000 00000064 T mangled_name", "00000000 00000064 T demangled_name", SymbolLang::Rust).unwrap();
+        let sym = Symbol::from_rawsymbols_lang(
+            "00008700 00000064 r mangled_name",
+            "00008700 00000064 r demangled_name",
+            SymbolLang::Any,
+        )
+        .unwrap();
+        let lib = Symbol::from_rawsymbols_lang(
+            "00000000 00000064 T mangled_name",
+            "00000000 00000064 T demangled_name",
+            SymbolLang::Rust,
+        )
+        .unwrap();
         assert!(!sym.related(&lib));
     }
 
     #[test]
     fn unrelated_size() {
-        let sym = Symbol::from_rawsymbols_lang("00008700 00000064 r mangled_name", "00008700 00000064 r demangled_name", SymbolLang::Any).unwrap();
-        let lib = Symbol::from_rawsymbols_lang("00000000 00000004 T mangled_name", "00000000 00000004 T demangled_name", SymbolLang::Rust).unwrap();
+        let sym = Symbol::from_rawsymbols_lang(
+            "00008700 00000064 r mangled_name",
+            "00008700 00000064 r demangled_name",
+            SymbolLang::Any,
+        )
+        .unwrap();
+        let lib = Symbol::from_rawsymbols_lang(
+            "00000000 00000004 T mangled_name",
+            "00000000 00000004 T demangled_name",
+            SymbolLang::Rust,
+        )
+        .unwrap();
         assert!(!sym.related(&lib));
     }
 }
@@ -528,10 +597,7 @@ mod guesser_tests {
             s.mangled,
             "_ZN54_$LT$$BP$const$u20$T$u20$as$u20$core..fmt..Pointer$GT$3fmt17hde7d70127d765717E"
         );
-        assert_eq!(
-            s.demangled,
-            "<*const T as core::fmt::Pointer>::fmt"
-        );
+        assert_eq!(s.demangled, "<*const T as core::fmt::Pointer>::fmt");
         assert_eq!(s.lang, SymbolLang::Rust);
     }
 
@@ -597,22 +663,18 @@ mod guesser_tests {
         let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
         let mut gsr = Guesser::new();
         gsr.add_rust_lib(nm, lib).unwrap();
-        let s = gsr.guess(
-            "2000f0a0 00001020 B z_main_stack",
-            "2000f0a0 00001020 B z_main_stack"
-        ).unwrap();
+        let s = gsr
+            .guess(
+                "2000f0a0 00001020 B z_main_stack",
+                "2000f0a0 00001020 B z_main_stack",
+            )
+            .unwrap();
 
         assert_eq!(s.addr, 0x2000f0a0);
         assert_eq!(s.size, 0x00001020);
         assert_eq!(s.sym_type, SymbolType::BssSection);
-        assert_eq!(
-            s.mangled,
-            "z_main_stack"
-        );
-        assert_eq!(
-            s.demangled,
-            "z_main_stack"
-        );
+        assert_eq!(s.mangled, "z_main_stack");
+        assert_eq!(s.demangled, "z_main_stack");
         assert_eq!(s.lang, SymbolLang::C);
     }
 
@@ -624,22 +686,18 @@ mod guesser_tests {
         let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
         let mut gsr = Guesser::new();
         gsr.add_rust_lib(nm, lib).unwrap();
-        let s = gsr.guess(
-            "0002e6da 000000fa T rust_main",
-            "0002e6da 000000fa T rust_main",
-        ).unwrap();
+        let s = gsr
+            .guess(
+                "0002e6da 000000fa T rust_main",
+                "0002e6da 000000fa T rust_main",
+            )
+            .unwrap();
 
         assert_eq!(s.addr, 0x0002e6da);
         assert_eq!(s.size, 0x000000fa);
         assert_eq!(s.sym_type, SymbolType::TextSection);
-        assert_eq!(
-            s.mangled,
-            "rust_main"
-        );
-        assert_eq!(
-            s.demangled,
-            "rust_main"
-        );
+        assert_eq!(s.mangled, "rust_main");
+        assert_eq!(s.demangled, "rust_main");
         assert_eq!(s.lang, SymbolLang::Rust);
     }
 }

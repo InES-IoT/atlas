@@ -65,7 +65,8 @@ mod tests {
 
     #[test]
     fn analyze() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+        let mut at =
+            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
         assert_eq!(at.syms.len(), 4142);
         assert_eq!(at.fails.len(), 0);
@@ -75,19 +76,23 @@ mod tests {
         assert_eq!(at.syms[0].mangled, "backend_attached");
         assert_eq!(at.syms[0].demangled, "backend_attached");
         assert_eq!(at.syms[0].lang, sym::SymbolLang::C);
-        assert_eq!(at.syms[at.syms.len()-1].addr, 0x200016c8);
-        assert_eq!(at.syms[at.syms.len()-1].size, 0x000067f0);
-        assert_eq!(at.syms[at.syms.len()-1].sym_type, sym::SymbolType::BssSection);
-        assert_eq!(at.syms[at.syms.len()-1].mangled, "_ZN2ot12gInstanceRawE");
-        assert_eq!(at.syms[at.syms.len()-1].demangled, "ot::gInstanceRaw");
-        assert_eq!(at.syms[at.syms.len()-1].lang, SymbolLang::Cpp);
+        assert_eq!(at.syms[at.syms.len() - 1].addr, 0x200016c8);
+        assert_eq!(at.syms[at.syms.len() - 1].size, 0x000067f0);
+        assert_eq!(
+            at.syms[at.syms.len() - 1].sym_type,
+            sym::SymbolType::BssSection
+        );
+        assert_eq!(at.syms[at.syms.len() - 1].mangled, "_ZN2ot12gInstanceRawE");
+        assert_eq!(at.syms[at.syms.len() - 1].demangled, "ot::gInstanceRaw");
+        assert_eq!(at.syms[at.syms.len() - 1].lang, SymbolLang::Cpp);
     }
 
     // Shell command:
     // arm-none-eabi-nm --print-size --size-sort --demangle rust_minimal_node.elf
     #[test]
     fn largest_syms() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+        let mut at =
+            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
         let mut iter = at.syms.iter().rev().take(3);
         let s = iter.next().unwrap();
@@ -150,10 +155,7 @@ mod tests {
         assert_eq!(s.size, 0x00000780);
         let s = iter.next().unwrap();
         assert_eq!(s.sym_type, SymbolType::TextSection);
-        assert_eq!(
-            s.mangled,
-            "shell_process"
-        );
+        assert_eq!(s.mangled, "shell_process");
         let s = iter.next().unwrap();
         assert_eq!(s.demangled, "memchr::memchr::fallback::memchr");
         assert_eq!(s.lang, SymbolLang::Rust);
@@ -187,8 +189,14 @@ mod tests {
         assert_eq!(s.addr, 0x00032110);
         assert_eq!(s.size, 0x0000039a);
         assert_eq!(s.sym_type, SymbolType::TextSection);
-        assert_eq!(s.mangled, "_ZN17compiler_builtins3int19specialized_div_rem11u64_div_rem17h3680578237da87d7E");
-        assert_eq!(s.demangled, "compiler_builtins::int::specialized_div_rem::u64_div_rem");
+        assert_eq!(
+            s.mangled,
+            "_ZN17compiler_builtins3int19specialized_div_rem11u64_div_rem17h3680578237da87d7E"
+        );
+        assert_eq!(
+            s.demangled,
+            "compiler_builtins::int::specialized_div_rem::u64_div_rem"
+        );
         assert_eq!(s.lang, SymbolLang::Rust);
     }
 
@@ -202,19 +210,52 @@ mod tests {
         assert!(at.analyze().is_ok());
         let report = at.report_lang();
 
-        assert_eq!(report.size(SymbolLang::Any, MemoryRegion::Both).as_u64(), 364659);
-        assert_eq!(report.size(SymbolLang::C, MemoryRegion::Both).as_u64(), 176808);
-        assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Both).as_u64(), 158870);
-        assert_eq!(report.size(SymbolLang::Rust, MemoryRegion::Both).as_u64(), 28981);
+        assert_eq!(
+            report.size(SymbolLang::Any, MemoryRegion::Both).as_u64(),
+            364659
+        );
+        assert_eq!(
+            report.size(SymbolLang::C, MemoryRegion::Both).as_u64(),
+            176808
+        );
+        assert_eq!(
+            report.size(SymbolLang::Cpp, MemoryRegion::Both).as_u64(),
+            158870
+        );
+        assert_eq!(
+            report.size(SymbolLang::Rust, MemoryRegion::Both).as_u64(),
+            28981
+        );
 
-        assert_eq!(report.size(SymbolLang::Any, MemoryRegion::Rom).as_u64(), 287316);
-        assert_eq!(report.size(SymbolLang::C, MemoryRegion::Rom).as_u64(), 126789);
-        assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Rom).as_u64(), 131546);
-        assert_eq!(report.size(SymbolLang::Rust, MemoryRegion::Rom).as_u64(), 28981);
+        assert_eq!(
+            report.size(SymbolLang::Any, MemoryRegion::Rom).as_u64(),
+            287316
+        );
+        assert_eq!(
+            report.size(SymbolLang::C, MemoryRegion::Rom).as_u64(),
+            126789
+        );
+        assert_eq!(
+            report.size(SymbolLang::Cpp, MemoryRegion::Rom).as_u64(),
+            131546
+        );
+        assert_eq!(
+            report.size(SymbolLang::Rust, MemoryRegion::Rom).as_u64(),
+            28981
+        );
 
-        assert_eq!(report.size(SymbolLang::Any, MemoryRegion::Ram).as_u64(), 77343);
-        assert_eq!(report.size(SymbolLang::C, MemoryRegion::Ram).as_u64(), 50019);
-        assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Ram).as_u64(), 27324);
+        assert_eq!(
+            report.size(SymbolLang::Any, MemoryRegion::Ram).as_u64(),
+            77343
+        );
+        assert_eq!(
+            report.size(SymbolLang::C, MemoryRegion::Ram).as_u64(),
+            50019
+        );
+        assert_eq!(
+            report.size(SymbolLang::Cpp, MemoryRegion::Ram).as_u64(),
+            27324
+        );
         assert_eq!(report.size(SymbolLang::Rust, MemoryRegion::Ram).as_u64(), 0);
     }
 
@@ -285,9 +326,12 @@ mod tests {
         let mut at =
             Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
-        let report = at.report_func(vec![SymbolLang::C, SymbolLang::Rust], MemoryRegion::Both, None);
+        let report = at.report_func(
+            vec![SymbolLang::C, SymbolLang::Rust],
+            MemoryRegion::Both,
+            None,
+        );
         assert_eq!(report.into_iter().count(), 2514);
         assert!(!report.into_iter().any(|s| s.lang == SymbolLang::Cpp));
     }
-
 }

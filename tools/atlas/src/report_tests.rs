@@ -22,8 +22,8 @@ mod totalmem_tests {
 #[cfg(test)]
 mod reportlang_tests {
     use super::super::*;
-    use regex::Regex;
     use lazy_static::lazy_static;
+    use regex::Regex;
 
     lazy_static! {
         static ref TEST_REPORT: LangReport = LangReport::new(
@@ -36,9 +36,18 @@ mod reportlang_tests {
     #[test]
     fn new() {
         let r = LangReport::new(
-            TotalMem{ rom: ByteSize::b(1), ram: ByteSize::b(2)},
-            TotalMem{ rom: ByteSize::b(3), ram: ByteSize::b(4)},
-            TotalMem{ rom: ByteSize::b(5), ram: ByteSize::b(6)},
+            TotalMem {
+                rom: ByteSize::b(1),
+                ram: ByteSize::b(2),
+            },
+            TotalMem {
+                rom: ByteSize::b(3),
+                ram: ByteSize::b(4),
+            },
+            TotalMem {
+                rom: ByteSize::b(5),
+                ram: ByteSize::b(6),
+            },
         );
         assert_eq!(r.c.rom.as_u64(), 1);
         assert_eq!(r.cpp.rom.as_u64(), 3);
@@ -88,15 +97,15 @@ mod reportlang_tests {
         let r = *TEST_REPORT;
 
         let mut iter = r.iter(MemoryRegion::Both);
-        let (lang,size,pct) = iter.next().unwrap();
+        let (lang, size, pct) = iter.next().unwrap();
         assert_eq!(lang, SymbolLang::Cpp);
         assert_eq!(size.as_u64(), 40);
         assert_eq!(pct, 20_f64);
-        let (lang,size,pct) = iter.next().unwrap();
+        let (lang, size, pct) = iter.next().unwrap();
         assert_eq!(lang, SymbolLang::C);
         assert_eq!(size.as_u64(), 50);
         assert_eq!(pct, 25_f64);
-        let (lang,size,pct) = iter.next().unwrap();
+        let (lang, size, pct) = iter.next().unwrap();
         assert_eq!(lang, SymbolLang::Rust);
         assert_eq!(size.as_u64(), 110);
         assert_eq!(pct, 55_f64);
@@ -107,15 +116,15 @@ mod reportlang_tests {
         let r = *TEST_REPORT;
 
         let mut iter = r.iter(MemoryRegion::Rom);
-        let (lang,size,pct) = iter.next().unwrap();
+        let (lang, size, pct) = iter.next().unwrap();
         assert_eq!(lang, SymbolLang::Cpp);
         assert_eq!(size.as_u64(), 25);
         assert_eq!(pct, 25_f64);
-        let (lang,size,pct) = iter.next().unwrap();
+        let (lang, size, pct) = iter.next().unwrap();
         assert_eq!(lang, SymbolLang::Rust);
         assert_eq!(size.as_u64(), 35);
         assert_eq!(pct, 35_f64);
-        let (lang,size,pct) = iter.next().unwrap();
+        let (lang, size, pct) = iter.next().unwrap();
         assert_eq!(lang, SymbolLang::C);
         assert_eq!(size.as_u64(), 40);
         assert_eq!(pct, 40_f64);
@@ -126,15 +135,15 @@ mod reportlang_tests {
         let r = *TEST_REPORT;
 
         let mut iter = r.iter(MemoryRegion::Ram);
-        let (lang,size,pct) = iter.next().unwrap();
+        let (lang, size, pct) = iter.next().unwrap();
         assert_eq!(lang, SymbolLang::C);
         assert_eq!(size.as_u64(), 10);
         assert_eq!(pct, 10_f64);
-        let (lang,size,pct) = iter.next().unwrap();
+        let (lang, size, pct) = iter.next().unwrap();
         assert_eq!(lang, SymbolLang::Cpp);
         assert_eq!(size.as_u64(), 15);
         assert_eq!(pct, 15_f64);
-        let (lang,size,pct) = iter.next().unwrap();
+        let (lang, size, pct) = iter.next().unwrap();
         assert_eq!(lang, SymbolLang::Rust);
         assert_eq!(size.as_u64(), 75);
         assert_eq!(pct, 75_f64);
@@ -243,7 +252,8 @@ mod reportfunc_tests {
             "2000f0a0 00001020 B z_main_stack",
             "2000f0a0 00001020 B z_main_stack",
             SymbolLang::C,
-        ).unwrap();
+        )
+        .unwrap();
         let s_cpp = Symbol::from_rawsymbols_lang(
             "00023c0c 00000434 T _ZN2ot3Mle9MleRouter19HandleAdvertisementERKNS_7MessageERKNS_3Ip611MessageInfoEPNS_8NeighborE",
             "00023c0c 00000434 T ot::Mle::MleRouter::HandleAdvertisement(ot::Message const&, ot::Ip6::MessageInfo const&, ot::Neighbor*)",
@@ -297,7 +307,9 @@ mod reportfunc_tests {
         let mut result = Vec::new();
         rep.print(false, &mut result).unwrap();
 
-        let re = Regex::new(r"\s*(\w+)\s*\|\s*(\S.*\S)\s*\|\s*(\S.*\S)\s*\|\s*(\w+)\s*\|\s*(\w+)\s*").unwrap();
+        let re =
+            Regex::new(r"\s*(\w+)\s*\|\s*(\S.*\S)\s*\|\s*(\S.*\S)\s*\|\s*(\w+)\s*\|\s*(\w+)\s*")
+                .unwrap();
         let mut data_iter = data.iter();
 
         for line in std::str::from_utf8(&result).unwrap().lines() {
@@ -310,7 +322,10 @@ mod reportfunc_tests {
             assert_eq!(caps[2], sym.demangled);
             assert_eq!(caps[3], sym.size.to_string());
             assert_eq!(caps[4].parse::<SymbolType>().unwrap(), sym.sym_type);
-            assert_eq!(caps[5].parse::<MemoryRegion>().unwrap(), sym.sym_type.mem_region());
+            assert_eq!(
+                caps[5].parse::<MemoryRegion>().unwrap(),
+                sym.sym_type.mem_region()
+            );
         }
         assert_eq!(data_iter.next(), None);
     }
@@ -322,7 +337,9 @@ mod reportfunc_tests {
         let mut result = Vec::new();
         rep.print(true, &mut result).unwrap();
 
-        let re = Regex::new(r"\s*(\w+)\s*\|\s*(\S.*\S)\s*\|\s*(\S.*\S)\s*\|\s*(\w+)\s*\|\s*(\w+)\s*").unwrap();
+        let re =
+            Regex::new(r"\s*(\w+)\s*\|\s*(\S.*\S)\s*\|\s*(\S.*\S)\s*\|\s*(\w+)\s*\|\s*(\w+)\s*")
+                .unwrap();
         let mut data_iter = data.iter();
 
         for line in std::str::from_utf8(&result).unwrap().lines() {
@@ -335,7 +352,10 @@ mod reportfunc_tests {
             assert_eq!(caps[2], sym.demangled);
             assert_eq!(caps[3], ByteSize::b(sym.size as u64).to_string_as(true));
             assert_eq!(caps[4].parse::<SymbolType>().unwrap(), sym.sym_type);
-            assert_eq!(caps[5].parse::<MemoryRegion>().unwrap(), sym.sym_type.mem_region());
+            assert_eq!(
+                caps[5].parse::<MemoryRegion>().unwrap(),
+                sym.sym_type.mem_region()
+            );
         }
         assert_eq!(data_iter.next(), None);
     }

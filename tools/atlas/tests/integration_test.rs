@@ -16,13 +16,17 @@ lazy_static! {
 fn symbol_from_rawsymbols() {
     let s = Symbol::from_rawsymbols(
         "0003116a 000004b8 T _ZN6memchr6memchr8fallback6memchr17h7546a6f92fcf340fE",
-        "0003116a 000004b8 T memchr::memchr::fallback::memchr"
-    ).unwrap();
+        "0003116a 000004b8 T memchr::memchr::fallback::memchr",
+    )
+    .unwrap();
 
     assert_eq!(s.addr, 0x0003116a);
     assert_eq!(s.size, 0x000004b8);
     assert_eq!(s.sym_type, SymbolType::TextSection);
-    assert_eq!(s.mangled, "_ZN6memchr6memchr8fallback6memchr17h7546a6f92fcf340fE");
+    assert_eq!(
+        s.mangled,
+        "_ZN6memchr6memchr8fallback6memchr17h7546a6f92fcf340fE"
+    );
     assert_eq!(s.demangled, "memchr::memchr::fallback::memchr");
     assert_eq!(s.lang, SymbolLang::Any);
 }
@@ -32,13 +36,17 @@ fn symbol_from_rawsymbols_lang() {
     let s = Symbol::from_rawsymbols_lang(
         "0003116a 000004b8 T _ZN6memchr6memchr8fallback6memchr17h7546a6f92fcf340fE",
         "0003116a 000004b8 T memchr::memchr::fallback::memchr",
-        SymbolLang::Rust
-    ).unwrap();
+        SymbolLang::Rust,
+    )
+    .unwrap();
 
     assert_eq!(s.addr, 0x0003116a);
     assert_eq!(s.size, 0x000004b8);
     assert_eq!(s.sym_type, SymbolType::TextSection);
-    assert_eq!(s.mangled, "_ZN6memchr6memchr8fallback6memchr17h7546a6f92fcf340fE");
+    assert_eq!(
+        s.mangled,
+        "_ZN6memchr6memchr8fallback6memchr17h7546a6f92fcf340fE"
+    );
     assert_eq!(s.demangled, "memchr::memchr::fallback::memchr");
     assert_eq!(s.lang, SymbolLang::Rust);
 }
@@ -48,11 +56,11 @@ fn symbol_from_rawsymbols_invalid() {
     let err = Symbol::from_rawsymbols(
         "0003116a 000004b8 T _ZN6memchr6memchr8fallback6memchr17h7546a6f92fcf340fE",
         "00000000 00000000 ? memchr::memchr::fallback::memchr",
-    ).unwrap_err();
+    )
+    .unwrap_err();
 
     assert_eq!(err.kind(), ErrorKind::InvalidSymbol);
     assert!(err.into_cause().is_none());
-
 }
 
 #[test]
@@ -105,31 +113,37 @@ fn guess_symbols() {
     assert_eq!(s.lang, SymbolLang::Cpp);
 
     // Rust
-    let s = gsr.guess(
-        "0003331e 00000398 T _ZN4core3fmt9Formatter3pad17h2e7465a2fecc1fa5E",
-        "0003331e 00000398 T core::fmt::Formatter::pad",
-    ).unwrap();
+    let s = gsr
+        .guess(
+            "0003331e 00000398 T _ZN4core3fmt9Formatter3pad17h2e7465a2fecc1fa5E",
+            "0003331e 00000398 T core::fmt::Formatter::pad",
+        )
+        .unwrap();
     assert_eq!(s.lang, SymbolLang::Rust);
 
     // Rust no mangle
-    let s = gsr.guess(
-        "0002e6da 000000fa T rust_main",
-        "0002e6da 000000fa T rust_main",
-    ).unwrap();
+    let s = gsr
+        .guess(
+            "0002e6da 000000fa T rust_main",
+            "0002e6da 000000fa T rust_main",
+        )
+        .unwrap();
     assert_eq!(s.lang, SymbolLang::Rust);
 
     // C
-    let s = gsr.guess(
-        "2000f0a0 00001020 B z_main_stack",
-        "2000f0a0 00001020 B z_main_stack",
-    ).unwrap();
+    let s = gsr
+        .guess(
+            "2000f0a0 00001020 B z_main_stack",
+            "2000f0a0 00001020 B z_main_stack",
+        )
+        .unwrap();
     assert_eq!(s.lang, SymbolLang::C);
 }
 
 #[test]
 fn guess_permission_denied() {
     let mut gsr = Guesser::new();
-    let err = gsr.add_rust_lib("/etc/shadow","/etc/shadow").unwrap_err();
+    let err = gsr.add_rust_lib("/etc/shadow", "/etc/shadow").unwrap_err();
 
     assert_eq!(err.kind(), ErrorKind::Nm);
     let cause = err.into_cause().unwrap();
@@ -170,8 +184,7 @@ fn largest_syms() {
 
 #[test]
 fn filter_complex() {
-    let mut at =
-        Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let mut iter = at
         .syms
@@ -191,8 +204,14 @@ fn filter_complex() {
     assert_eq!(s.addr, 0x00032110);
     assert_eq!(s.size, 0x0000039a);
     assert_eq!(s.sym_type, SymbolType::TextSection);
-    assert_eq!(s.mangled, "_ZN17compiler_builtins3int19specialized_div_rem11u64_div_rem17h3680578237da87d7E");
-    assert_eq!(s.demangled, "compiler_builtins::int::specialized_div_rem::u64_div_rem");
+    assert_eq!(
+        s.mangled,
+        "_ZN17compiler_builtins3int19specialized_div_rem11u64_div_rem17h3680578237da87d7E"
+    );
+    assert_eq!(
+        s.demangled,
+        "compiler_builtins::int::specialized_div_rem::u64_div_rem"
+    );
     assert_eq!(s.lang, SymbolLang::Rust);
 }
 
@@ -201,32 +220,63 @@ fn filter_complex() {
 // added to check if modification down the line change their outputs.
 #[test]
 fn report_lang_size() {
-    let mut at =
-        Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let report = at.report_lang();
 
-    assert_eq!(report.size(SymbolLang::Any, MemoryRegion::Both).as_u64(), 364659);
-    assert_eq!(report.size(SymbolLang::C, MemoryRegion::Both).as_u64(), 176808);
-    assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Both).as_u64(), 158870);
-    assert_eq!(report.size(SymbolLang::Rust, MemoryRegion::Both).as_u64(), 28981);
+    assert_eq!(
+        report.size(SymbolLang::Any, MemoryRegion::Both).as_u64(),
+        364659
+    );
+    assert_eq!(
+        report.size(SymbolLang::C, MemoryRegion::Both).as_u64(),
+        176808
+    );
+    assert_eq!(
+        report.size(SymbolLang::Cpp, MemoryRegion::Both).as_u64(),
+        158870
+    );
+    assert_eq!(
+        report.size(SymbolLang::Rust, MemoryRegion::Both).as_u64(),
+        28981
+    );
 
-    assert_eq!(report.size(SymbolLang::Any, MemoryRegion::Rom).as_u64(), 287316);
-    assert_eq!(report.size(SymbolLang::C, MemoryRegion::Rom).as_u64(), 126789);
-    assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Rom).as_u64(), 131546);
-    assert_eq!(report.size(SymbolLang::Rust, MemoryRegion::Rom).as_u64(), 28981);
+    assert_eq!(
+        report.size(SymbolLang::Any, MemoryRegion::Rom).as_u64(),
+        287316
+    );
+    assert_eq!(
+        report.size(SymbolLang::C, MemoryRegion::Rom).as_u64(),
+        126789
+    );
+    assert_eq!(
+        report.size(SymbolLang::Cpp, MemoryRegion::Rom).as_u64(),
+        131546
+    );
+    assert_eq!(
+        report.size(SymbolLang::Rust, MemoryRegion::Rom).as_u64(),
+        28981
+    );
 
-    assert_eq!(report.size(SymbolLang::Any, MemoryRegion::Ram).as_u64(), 77343);
-    assert_eq!(report.size(SymbolLang::C, MemoryRegion::Ram).as_u64(), 50019);
-    assert_eq!(report.size(SymbolLang::Cpp, MemoryRegion::Ram).as_u64(), 27324);
+    assert_eq!(
+        report.size(SymbolLang::Any, MemoryRegion::Ram).as_u64(),
+        77343
+    );
+    assert_eq!(
+        report.size(SymbolLang::C, MemoryRegion::Ram).as_u64(),
+        50019
+    );
+    assert_eq!(
+        report.size(SymbolLang::Cpp, MemoryRegion::Ram).as_u64(),
+        27324
+    );
     assert_eq!(report.size(SymbolLang::Rust, MemoryRegion::Ram).as_u64(), 0);
 }
 
 // See `report_lang_size`.
 #[test]
 fn report_lang_size_pct() {
-    let mut at =
-        Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let report = at.report_lang();
 
@@ -248,8 +298,7 @@ fn report_lang_size_pct() {
 
 #[test]
 fn report_func() {
-    let mut at =
-        Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let report = at.report_func(vec![SymbolLang::Any], MemoryRegion::Both, Some(6));
     assert_eq!(report.into_iter().count(), 6);
@@ -267,10 +316,13 @@ fn report_func() {
 
 #[test]
 fn report_func_double_lang() {
-    let mut at =
-        Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
-    let report = at.report_func(vec![SymbolLang::C, SymbolLang::Rust], MemoryRegion::Both, None);
+    let report = at.report_func(
+        vec![SymbolLang::C, SymbolLang::Rust],
+        MemoryRegion::Both,
+        None,
+    );
     assert_eq!(report.into_iter().count(), 2514);
     assert!(!report.into_iter().any(|s| s.lang == SymbolLang::Cpp));
 }
