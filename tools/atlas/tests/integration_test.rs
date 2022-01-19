@@ -7,9 +7,30 @@
 use atlas::{Atlas, ErrorKind, Guesser, MemoryRegion, Symbol, SymbolLang, SymbolType};
 use lazy_static::lazy_static;
 use std::path::PathBuf;
+use std::process::Command;
 
 lazy_static! {
-    static ref NM_PATH: String = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
+    static ref NM_PATH: String = {
+        if let Ok(path) = std::env::var("NM_PATH") {
+            path
+        } else {
+            let out = Command::new("which")
+                .arg("arm-none-eabi-nm")
+                .output()
+                .expect("NM_PATH env. variable not set and \"which arm-none-eabi-nm\" failed.");
+            if !out.status.success() {
+                panic!("\"which arm-none-eabi-nm\" found nothing.");
+            }
+
+            String::from(
+                std::str::from_utf8(&out.stdout)
+                    .expect("UTF-8 error while parsing the output from \"which arm-none-eabi-nm\"")
+                    .lines()
+                    .next()
+                    .unwrap()
+            )
+        }
+    };
 }
 
 #[test]

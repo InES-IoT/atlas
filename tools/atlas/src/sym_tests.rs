@@ -542,6 +542,31 @@ mod symbol_tests {
 #[cfg(test)]
 mod guesser_tests {
     use super::super::*;
+    use lazy_static::lazy_static;
+
+    lazy_static! {
+        static ref NM_PATH: String = {
+            if let Ok(path) = std::env::var("NM_PATH") {
+                path
+            } else {
+                let out = Command::new("which")
+                    .arg("arm-none-eabi-nm")
+                    .output()
+                    .expect("NM_PATH env. variable not set and \"which arm-none-eabi-nm\" failed.");
+                if !out.status.success() {
+                    panic!("\"which arm-none-eabi-nm\" found nothing.");
+                }
+
+                String::from(
+                    std::str::from_utf8(&out.stdout)
+                        .expect("UTF-8 error while parsing the output from \"which arm-none-eabi-nm\"")
+                        .lines()
+                        .next()
+                        .unwrap()
+                )
+            }
+        };
+    }
 
     #[test]
     fn new() {
@@ -555,9 +580,8 @@ mod guesser_tests {
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/libsecprint.a");
         let lib = lib.canonicalize().unwrap();
-        let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
         let mut gsr = Guesser::new();
-        gsr.add_rust_lib(nm, lib).unwrap();
+        gsr.add_rust_lib(&*NM_PATH, lib).unwrap();
         assert_eq!(gsr.lib_syms.len(), 2493);
     }
 
@@ -572,9 +596,8 @@ mod guesser_tests {
 
     #[test]
     fn add_rust_lib_permission_denied() {
-        let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
         let mut gsr = Guesser::new();
-        assert!(gsr.add_rust_lib(nm, "/etc/shadow").is_err());
+        assert!(gsr.add_rust_lib(&*NM_PATH, "/etc/shadow").is_err());
     }
 
     #[test]
@@ -582,9 +605,8 @@ mod guesser_tests {
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/libsecprint.a");
         let lib = lib.canonicalize().unwrap();
-        let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
         let mut gsr = Guesser::new();
-        gsr.add_rust_lib(nm, lib).unwrap();
+        gsr.add_rust_lib(&*NM_PATH, lib).unwrap();
         let s = gsr.guess(
             "0002eda6 000000a6 T _ZN54_$LT$$BP$const$u20$T$u20$as$u20$core..fmt..Pointer$GT$3fmt17hde7d70127d765717E",
             "0002eda6 000000a6 T <*const T as core::fmt::Pointer>::fmt"
@@ -606,9 +628,8 @@ mod guesser_tests {
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/libsecprint.a");
         let lib = lib.canonicalize().unwrap();
-        let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
         let mut gsr = Guesser::new();
-        gsr.add_rust_lib(nm, lib).unwrap();
+        gsr.add_rust_lib(&*NM_PATH, lib).unwrap();
         let s = gsr.guess(
             "0002ece2 00000022 T _ZN4core3ptr77_$LT$impl$u20$core..fmt..Pointer$u20$for$u20$fn$LP$$RP$$u20$.$GT$$u20$Ret$GT$3fmt17h8b264a36c1e2f9a7E",
             "0002ece2 00000022 T core::ptr::<impl core::fmt::Pointer for fn() -> Ret>::fmt"
@@ -633,9 +654,8 @@ mod guesser_tests {
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/libsecprint.a");
         let lib = lib.canonicalize().unwrap();
-        let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
         let mut gsr = Guesser::new();
-        gsr.add_rust_lib(nm, lib).unwrap();
+        gsr.add_rust_lib(&*NM_PATH, lib).unwrap();
         let s = gsr.guess(
             "00023c0c 00000434 T _ZN2ot3Mle9MleRouter19HandleAdvertisementERKNS_7MessageERKNS_3Ip611MessageInfoEPNS_8NeighborE",
             "00023c0c 00000434 T ot::Mle::MleRouter::HandleAdvertisement(ot::Message const&, ot::Ip6::MessageInfo const&, ot::Neighbor*)"
@@ -660,9 +680,8 @@ mod guesser_tests {
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/libsecprint.a");
         let lib = lib.canonicalize().unwrap();
-        let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
         let mut gsr = Guesser::new();
-        gsr.add_rust_lib(nm, lib).unwrap();
+        gsr.add_rust_lib(&*NM_PATH, lib).unwrap();
         let s = gsr
             .guess(
                 "2000f0a0 00001020 B z_main_stack",
@@ -683,9 +702,8 @@ mod guesser_tests {
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/libsecprint.a");
         let lib = lib.canonicalize().unwrap();
-        let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
         let mut gsr = Guesser::new();
-        gsr.add_rust_lib(nm, lib).unwrap();
+        gsr.add_rust_lib(&*NM_PATH, lib).unwrap();
         let s = gsr
             .guess(
                 "0002e6da 000000fa T rust_main",
