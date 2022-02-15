@@ -4,7 +4,7 @@
 //! folder. Maybe all the tests requiring such files should be placed in the
 //! integration tests and not in the unittests.
 
-use atlas::{Atlas, ErrorKind, Guesser, MemoryRegion, Symbol, SymbolLang, SymbolType};
+use atlas::{Atlas, ErrorKind, LangDetector, MemoryRegion, Symbol, SymbolLang, SymbolType};
 use lazy_static::lazy_static;
 use std::path::PathBuf;
 use std::process::Command;
@@ -118,24 +118,24 @@ fn symbol_related() {
 }
 
 #[test]
-fn guess_symbols() {
+fn detect_symbols() {
     let mut lib = std::env::current_dir().unwrap();
     lib.push("./aux/libsecprint.a");
     let lib = lib.canonicalize().unwrap();
     // let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
-    let mut gsr = Guesser::new();
-    gsr.add_rust_lib(&*NM_PATH, lib).unwrap();
+    let mut detector = LangDetector::new();
+    detector.add_rust_lib(&*NM_PATH, lib).unwrap();
 
     // Cpp
-    let s = gsr.guess(
+    let s = detector.detect(
         "00023c0c 00000434 T _ZN2ot3Mle9MleRouter19HandleAdvertisementERKNS_7MessageERKNS_3Ip611MessageInfoEPNS_8NeighborE",
         "00023c0c 00000434 T ot::Mle::MleRouter::HandleAdvertisement(ot::Message const&, ot::Ip6::MessageInfo const&, ot::Neighbor*)"
     ).unwrap();
     assert_eq!(s.lang, SymbolLang::Cpp);
 
     // Rust
-    let s = gsr
-        .guess(
+    let s = detector
+        .detect(
             "0003331e 00000398 T _ZN4core3fmt9Formatter3pad17h2e7465a2fecc1fa5E",
             "0003331e 00000398 T core::fmt::Formatter::pad",
         )
@@ -143,8 +143,8 @@ fn guess_symbols() {
     assert_eq!(s.lang, SymbolLang::Rust);
 
     // Rust no mangle
-    let s = gsr
-        .guess(
+    let s = detector
+        .detect(
             "0002e6da 000000fa T rust_main",
             "0002e6da 000000fa T rust_main",
         )
@@ -152,8 +152,8 @@ fn guess_symbols() {
     assert_eq!(s.lang, SymbolLang::Rust);
 
     // C
-    let s = gsr
-        .guess(
+    let s = detector
+        .detect(
             "2000f0a0 00001020 B z_main_stack",
             "2000f0a0 00001020 B z_main_stack",
         )
@@ -162,9 +162,9 @@ fn guess_symbols() {
 }
 
 #[test]
-fn guess_permission_denied() {
-    let mut gsr = Guesser::new();
-    let err = gsr.add_rust_lib("/etc/shadow", "/etc/shadow").unwrap_err();
+fn detect_permission_denied() {
+    let mut detector = LangDetector::new();
+    let err = detector.add_rust_lib("/etc/shadow", "/etc/shadow").unwrap_err();
 
     assert_eq!(err.kind(), ErrorKind::Nm);
     let cause = err.into_cause().unwrap();

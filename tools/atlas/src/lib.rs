@@ -17,11 +17,14 @@ pub use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+pub mod detect;
+pub use detect::LangDetector;
+
 pub mod error;
 pub use error::{Error, ErrorKind};
 
 pub mod sym;
-pub use sym::{Guesser, MemoryRegion, RawSymbol, Symbol, SymbolLang, SymbolType};
+pub use sym::{MemoryRegion, RawSymbol, Symbol, SymbolLang, SymbolType};
 
 pub mod report;
 pub use report::{FuncReport, LangReport, TotalMem};
@@ -115,8 +118,8 @@ impl Atlas {
     /// stores the created symbols in the `syms` Vec. Failed symbols are stored
     /// in the `fails` Vec as a tuple of Strings (mangled, demangled).
     pub fn analyze(&mut self) -> Result<(), Error> {
-        let mut gsr = Guesser::new();
-        gsr.add_rust_lib(&self.nm, &self.lib).unwrap();
+        let mut detector = LangDetector::new();
+        detector.add_rust_lib(&self.nm, &self.lib).unwrap();
 
         let mangled_out = Command::new(&self.nm)
             .arg("--print-size")
@@ -148,7 +151,7 @@ impl Atlas {
             .map_err(|str_error| Error::new(ErrorKind::Nm).with(str_error))?;
 
         for (mangled, demangled) in mangled_str.lines().zip(demangled_str.lines()) {
-            let guess = match gsr.guess(mangled, demangled) {
+            let detected = match detector.detect(mangled, demangled) {
                 Ok(g) => g,
                 Err(_) => {
                     self.fails
@@ -156,7 +159,7 @@ impl Atlas {
                     continue;
                 }
             };
-            self.syms.push(guess);
+            self.syms.push(detected);
         }
 
         // The symbols *should* already be sorted but the `is_sorted_by_key`

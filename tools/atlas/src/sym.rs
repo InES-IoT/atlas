@@ -1,12 +1,11 @@
-//! Handle symbols output by the [nm](https://sourceware.org/binutils/docs/binutils/nm.html) utility.
+//! Handle symbols output by the [nm](https://sourceware.org/binutils/docs/binutils/nm.html)
+//! utility.
 
 use crate::error::{Error, ErrorKind};
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
-use std::path::Path;
-use std::process::Command;
 use std::str::FromStr;
 
 #[cfg(test)]
@@ -84,7 +83,8 @@ impl TryFrom<&str> for SymbolLang {
     }
 }
 
-/// A list of symbol types returned by the [nm](https://sourceware.org/binutils/docs/binutils/nm.html) utility.
+/// A list of symbol types returned by the
+/// [nm](https://sourceware.org/binutils/docs/binutils/nm.html) utility.
 #[derive(PartialEq, Debug, Clone, Copy)]
 pub enum SymbolType {
     /// `A` - The symbol’s value is absolute, and will not be changed by further
@@ -455,127 +455,3 @@ impl Symbol {
     }
 }
 
-/// Struct containing the necessary information to determine the origin language
-/// of [`Symbol`]s.
-///
-/// # Note:
-/// The name was given during a time when the origin language of a symbol could
-/// not be determined with absolute certainty. This should be renamed in a
-/// future release.
-// TODO:
-// Rewrite this struct with the builder pattern.
-#[derive(Debug, Default)]
-pub struct Guesser {
-    lib_syms: Vec<Symbol>,
-}
-
-impl Guesser {
-    /// Creates a new [`Guesser`].
-    pub fn new() -> Self {
-        Default::default()
-    }
-
-    /// Parses and stores the symbols contained in the Rust library with the
-    /// supplied nm utility. This can then be used by the [`guess`] method for
-    /// determining if a symbol stems from a Rust library or not.
-    ///
-    /// [`guess`]: Guesser::guess
-    pub fn add_rust_lib<T, U>(&mut self, nm: T, lib: U) -> Result<(), Error>
-    where
-        T: AsRef<Path>,
-        U: AsRef<Path>,
-    {
-        let mangled_out = Command::new(nm.as_ref())
-            .arg("--print-size")
-            .arg(lib.as_ref())
-            .output()
-            .map_err(|io_error| Error::new(ErrorKind::Nm).with(io_error))?;
-
-        if !mangled_out.status.success() {
-            return Err(Error::new(ErrorKind::Nm));
-        }
-
-        let mangled_str = std::str::from_utf8(&mangled_out.stdout)
-            .map_err(|str_error| Error::new(ErrorKind::Nm).with(str_error))?;
-
-        let demangled_out = Command::new(nm.as_ref())
-            .arg("--print-size")
-            .arg("--demangle")
-            .arg(lib.as_ref())
-            .output()
-            .map_err(|io_error| Error::new(ErrorKind::Nm).with(io_error))?;
-
-        if !demangled_out.status.success() {
-            return Err(Error::new(ErrorKind::Nm));
-        }
-
-        let demangled_str = std::str::from_utf8(&demangled_out.stdout)
-            .map_err(|str_error| Error::new(ErrorKind::Nm).with(str_error))?;
-
-        for (mangled, demangled) in mangled_str.lines().zip(demangled_str.lines()) {
-            let s = match Symbol::from_rawsymbols_lang(mangled, demangled, SymbolLang::Rust) {
-                Ok(s) => s,
-                // TODO:
-                // Differentiate between the various reasons for an error. Some
-                // might be expected (e.g lines like "mulvdi3.o:") while others
-                // should not fail and should inform the user.
-                Err(_) => continue,
-            };
-
-            // TODO:
-            // Why is this check here? Find out and make a comment here.
-            if s.mangled == s.demangled {
-                // TODO:
-                // Rewrite this using a simple regex and check the performance
-                // difference
-                let mut chars = s.mangled.chars();
-                if let Some(c) = chars.next() {
-                    if matches!(c, 'a'..='z' | 'A'..='Z' | '_') {
-                        // TODO:
-                        // Reuse the iterator here?
-                        if s.mangled
-                            .chars()
-                            .all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'))
-                        {
-                            self.lib_syms.push(s);
-                        }
-                    }
-                }
-            } else {
-                self.lib_syms.push(s);
-            }
-        }
-        Ok(())
-    }
-
-    /// Guess the origin language of symbol. First, this checks if the symbol
-    /// is related (using [`Symbol::related`]) to any of the symbols parsed from
-    /// the Rust library with [`add_rust_lib`] and set to [`SymbolLang::Rust`].
-    /// If it isn't related to any of them, the language is set to
-    /// [`SymbolLang::C`] if the mangled and demangled name of the symbol is the
-    /// same (C doesn't have name mangling). Otherwise, it is set to
-    /// [`SymbolLang::Cpp`].
-    ///
-    /// [`add_rust_lib`]: Guesser::add_rust_lib
-    // Rename this method `guess_raw` and create a second method called `guess`.
-    // This method will then only create the symbol from the rawsymbols and call
-    // the `guess` method. This would allow the user to guess the language for
-    // an already created Symbol.
-    pub fn guess<T>(&self, mangled: T, demangled: T) -> Result<Symbol, Error>
-    where
-        T: TryInto<RawSymbol>,
-    {
-        let mut sym = Symbol::from_rawsymbols(mangled, demangled)?;
-
-        if self.lib_syms.iter().any(|lib_sym| sym.related(lib_sym)) {
-            sym.lang = SymbolLang::Rust;
-        } else {
-            if sym.mangled == sym.demangled {
-                sym.lang = SymbolLang::C;
-            } else {
-                sym.lang = SymbolLang::Cpp;
-            }
-        }
-        Ok(sym)
-    }
-}
