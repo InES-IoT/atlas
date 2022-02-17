@@ -74,11 +74,6 @@ impl Atlas {
     /// when building the ELF file.
     ///
     /// All path provided can either be absolute or relative.
-    // TODO:
-    // Check if some from trait could be implemented for this crate's Error type
-    // to get rid of the .map_err() calls. Otherwhise, a private helper function
-    // could be created to handle the the canonicalizing and permission
-    // checking. The return of this method could then only call .map_err() once.
     pub fn new<N, E, L>(nm: N, elf: E, lib: L) -> Result<Self, Error>
     where
         N: AsRef<Path>,
@@ -89,21 +84,18 @@ impl Atlas {
 
         let nm = curr
             .join(nm.as_ref())
-            .canonicalize()
-            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
+            .canonicalize()?;
         let elf = curr
             .join(elf.as_ref())
-            .canonicalize()
-            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
+            .canonicalize()?;
         let lib = curr
             .join(lib.as_ref())
-            .canonicalize()
-            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
+            .canonicalize()?;
 
         // Check permission by opening and closing files
-        let _ = File::open(&nm).map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
-        let _ = File::open(&elf).map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
-        let _ = File::open(&lib).map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
+        let _ = File::open(&nm)?;
+        let _ = File::open(&elf)?;
+        let _ = File::open(&lib)?;
 
         Ok(Atlas {
             nm,

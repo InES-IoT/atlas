@@ -92,6 +92,12 @@ impl fmt::Display for Error {
     }
 }
 
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Self::new(ErrorKind::Io).with(e)
+    }
+}
+
 impl From<std::convert::Infallible> for Error {
     /// See explanation in [`crate::sym::Symbol::from_rawsymbols`].
     fn from(_: std::convert::Infallible) -> Self {

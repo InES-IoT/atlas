@@ -138,9 +138,10 @@ impl LangReport {
         let mem_string = format!("{:?}", &mem_type);
         table.set_titles(row![&mem_string, "Size [Bytes]", "%age"]);
         table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
-        table
-            .print(writer)
-            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))
+
+        // `?` uses `From<std::io::error> for Error` to convert the Error variant. This unpacks the
+        // Ok variant with then has to be repackaged.
+        Ok(table.print(writer)?)
     }
 
     /// Creates an iterator which returns a tuple for every language containing
@@ -306,9 +307,9 @@ where
             let _ = std::mem::replace(&mut r[WRAPPED_COLUMN], new_cell);
         }
 
-        table
-            .print(writer)
-            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))
+        // `?` uses `From<std::io::error> for Error` to convert the Error variant. This unpacks the
+        // Ok variant with then has to be repackaged.
+        Ok(table.print(writer)?)
     }
 }
 
