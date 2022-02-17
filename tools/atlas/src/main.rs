@@ -67,7 +67,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         let lang_rep = at.report_lang();
         lang_rep.print(region, args.human, &mut std::io::stdout())?;
     } else {
-        let func_rep = at.report_func(lang, region, args.count);
+        let func_rep = at.report_syms(lang, region, args.count);
         func_rep.print(args.human, &mut std::io::stdout())?;
     }
 

@@ -27,7 +27,7 @@ pub mod sym;
 pub use sym::{MemoryRegion, RawSymbol, Symbol, SymbolLang, SymbolType};
 
 pub mod report;
-pub use report::{FuncReport, LangReport, TotalMem};
+pub use report::{LangReport, SymbolReport, TotalMem};
 
 #[cfg(test)]
 #[path = "./lib_tests.rs"]
@@ -215,17 +215,12 @@ impl Atlas {
     /// one or more specific languages can be used. `max_count` can be used to
     /// limit the amount of symbols in the report. Passing `None` will return a
     /// report with all symbols.
-    ///
-    /// This will probably be renamed in a future release to "report_symbols" or
-    /// something similar.
-    // TODO:
-    // Rename to report_sym or something similar.
-    pub fn report_func(
+    pub fn report_syms(
         &self,
         lang: Vec<SymbolLang>,
         mem_type: MemoryRegion,
         max_count: Option<usize>,
-    ) -> FuncReport<impl Iterator<Item = &Symbol> + Clone> {
+    ) -> SymbolReport<impl Iterator<Item = &Symbol> + Clone> {
         let iter = self.syms.iter().rev();
         let iter =
             iter.filter(move |s| (lang.contains(&SymbolLang::Any)) || (lang.contains(&s.lang)));
@@ -238,6 +233,6 @@ impl Atlas {
             usize::MAX
         });
 
-        FuncReport::new(iter)
+        SymbolReport::new(iter)
     }
 }

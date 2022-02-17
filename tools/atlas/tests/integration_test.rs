@@ -321,7 +321,7 @@ fn report_lang_size_pct() {
 fn report_func() {
     let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
-    let report = at.report_func(vec![SymbolLang::Any], MemoryRegion::Both, Some(6));
+    let report = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, Some(6));
     assert_eq!(report.into_iter().count(), 6);
     let mut iter = report.into_iter();
     let s = iter.next().unwrap();
@@ -339,7 +339,7 @@ fn report_func() {
 fn report_func_double_lang() {
     let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
-    let report = at.report_func(
+    let report = at.report_syms(
         vec![SymbolLang::C, SymbolLang::Rust],
         MemoryRegion::Both,
         None,

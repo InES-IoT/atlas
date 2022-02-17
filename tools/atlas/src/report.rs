@@ -182,26 +182,23 @@ impl LangReport {
 }
 
 /// Struct used for reporting the size of individual symbols.
-/// Will probably be renamed to `SymbolReport` in a future release.
-// TODO:
-// This should probably be renamed to SymbolReport.
-pub struct FuncReport<'a, I>
+pub struct SymbolReport<'a, I>
 where
     I: Iterator<Item = &'a Symbol> + Clone,
 {
     iter: I,
 }
 
-impl<'a, I> FuncReport<'a, I>
+impl<'a, I> SymbolReport<'a, I>
 where
     I: Iterator<Item = &'a Symbol> + Clone,
 {
-    /// Creates a new [`FuncReport`].
-    /// This type is intended to be created by the `Atlas::report_func` method
+    /// Creates a new [`SymbolReport`].
+    /// This type is intended to be created by the [`crate::Atlas::report_syms`] method
     /// which creates an iterator with filters applied to narrow down the
     /// contained symbols.
-    pub fn new(iter: I) -> FuncReport<'a, I> {
-        FuncReport { iter }
+    pub fn new(iter: I) -> SymbolReport<'a, I> {
+        SymbolReport { iter }
     }
 
     /// Writes a table to the supplied writer with all the symbols contained in
@@ -313,12 +310,12 @@ where
     }
 }
 
-impl<'a, I> IntoIterator for &FuncReport<'a, I>
+impl<'a, I> IntoIterator for &SymbolReport<'a, I>
 where
     I: Iterator<Item = &'a Symbol> + Clone,
 {
     type Item = I::Item;
-    type IntoIter = ReportFuncIter<'a, I>;
+    type IntoIter = SymbolReportIter<'a, I>;
 
     fn into_iter(self) -> Self::IntoIter {
         Self::IntoIter {
@@ -327,14 +324,14 @@ where
     }
 }
 
-pub struct ReportFuncIter<'a, I>
+pub struct SymbolReportIter<'a, I>
 where
     I: Iterator<Item = &'a Symbol> + Clone,
 {
     iter: I,
 }
 
-impl<'a, I> Iterator for ReportFuncIter<'a, I>
+impl<'a, I> Iterator for SymbolReportIter<'a, I>
 where
     I: Iterator<Item = &'a Symbol> + Clone,
 {

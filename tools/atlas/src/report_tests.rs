@@ -20,7 +20,7 @@ mod totalmem_tests {
 }
 
 #[cfg(test)]
-mod reportlang_tests {
+mod langreport_tests {
     use super::super::*;
     use lazy_static::lazy_static;
     use regex::Regex;
@@ -242,7 +242,7 @@ mod reportlang_tests {
     }
 }
 
-mod reportfunc_tests {
+mod symbolreport_tests {
     use super::super::*;
     use crate::sym::SymbolType;
     use regex::Regex;
@@ -269,13 +269,13 @@ mod reportfunc_tests {
 
     #[test]
     fn new() {
-        let _ = FuncReport::new(create_test_data().iter());
+        let _ = SymbolReport::new(create_test_data().iter());
     }
 
     #[test]
     fn iter() {
         let data = create_test_data();
-        let report = FuncReport::new(data.iter());
+        let report = SymbolReport::new(data.iter());
         let iter = report.into_iter();
         assert_eq!(
             iter.collect::<Vec<&Symbol>>(),
@@ -286,7 +286,7 @@ mod reportfunc_tests {
     #[test]
     fn iter_and_print_not_consuming() {
         let data = create_test_data();
-        let report = FuncReport::new(data.iter());
+        let report = SymbolReport::new(data.iter());
         let iter = report.into_iter();
         assert_eq!(
             iter.collect::<Vec<&Symbol>>(),
@@ -303,7 +303,7 @@ mod reportfunc_tests {
     #[test]
     fn print_machine() {
         let data = create_test_data();
-        let rep = FuncReport::new(data.iter());
+        let rep = SymbolReport::new(data.iter());
         let mut result = Vec::new();
         rep.print(false, &mut result).unwrap();
 
@@ -333,7 +333,7 @@ mod reportfunc_tests {
     #[test]
     fn print_human() {
         let data = create_test_data();
-        let rep = FuncReport::new(data.iter());
+        let rep = SymbolReport::new(data.iter());
         let mut result = Vec::new();
         rep.print(true, &mut result).unwrap();
 
