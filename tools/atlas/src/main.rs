@@ -64,10 +64,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     at.analyze()?;
 
     if args.summary {
-        let lang_rep = at.report_lang();
+        let lang_rep = at.report_lang().unwrap();
         lang_rep.print(region, args.human, &mut std::io::stdout())?;
     } else {
-        let func_rep = at.report_syms(lang, region, args.count);
+        let func_rep = at.report_syms(lang, region, args.count).unwrap();
         func_rep.print(args.human, &mut std::io::stdout())?;
     }
 

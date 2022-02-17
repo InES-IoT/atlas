@@ -43,8 +43,6 @@ mod lib_tests;
 /// are remaining) are now identified as C.
 // TODO:
 // - Compare the performance to using other collections (e.g. HashMap, BTreeMap)
-// - Probably put the `syms` field in a Option to signal that nothing has been
-//   analyzed yet and prevend the user from calling the report methods.
 #[derive(Debug)]
 pub struct Atlas {
     /// Canonicalized path to the nm utility
@@ -54,10 +52,10 @@ pub struct Atlas {
     /// Absolute path to the Rust static library
     pub lib: PathBuf,
     /// Vector containing the symbols with their identified origin language.
-    pub syms: Vec<Symbol>,
+    pub syms: Option<Vec<Symbol>>,
     /// Vector containing the strings (mangled and demangled) of all symbols
     /// whose language couldn't be determined
-    pub fails: Vec<(String, String)>,
+    pub fails: Option<Vec<(String, String)>>,
 }
 
 impl Atlas {
@@ -101,8 +99,8 @@ impl Atlas {
             nm,
             elf,
             lib,
-            syms: Vec::new(),
-            fails: Vec::new(),
+            syms: None,
+            fails: None,
         })
     }
 
@@ -142,16 +140,18 @@ impl Atlas {
         let demangled_str = std::str::from_utf8(&demangled_out.stdout)
             .map_err(|str_error| Error::new(ErrorKind::Nm).with(str_error))?;
 
+        let mut syms = Vec::new();
+        let mut fails = Vec::new();
+
         for (mangled, demangled) in mangled_str.lines().zip(demangled_str.lines()) {
             let detected = match detector.detect(mangled, demangled) {
                 Ok(g) => g,
                 Err(_) => {
-                    self.fails
-                        .push((String::from(mangled), String::from(demangled)));
+                    fails.push((String::from(mangled), String::from(demangled)));
                     continue;
                 }
             };
-            self.syms.push(detected);
+            syms.push(detected);
         }
 
         // The symbols *should* already be sorted but the `is_sorted_by_key`
@@ -159,7 +159,9 @@ impl Atlas {
         // to make sure. The `--size-sort` flag from the nm call should also not
         // be removed as this gets rid of a lot of symbols that don't have a
         // size at all (e.g. Kconfigs "00000001 A CONFIG_SHELL").
-        self.syms.sort_by_key(|s| s.size);
+        syms.sort_by_key(|s| s.size);
+        self.syms = Some(syms);
+        self.fails = Some(fails);
 
         Ok(())
     }
@@ -167,46 +169,41 @@ impl Atlas {
     /// Creates a language report which contains the absolute and relative
     /// memory usage of C, Cpp, and Rust for the different memory regions (ROM,
     /// RAM, both).
-    pub fn report_lang(&self) -> LangReport {
+    pub fn report_lang(&self) -> Option<LangReport> {
+        let syms = self.syms.as_ref()?;
         let c = TotalMem::new(
-            self.syms
-                .iter()
+            syms.iter()
                 .filter(|s| s.lang == SymbolLang::C)
                 .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
                 .fold(0, |acc, s| acc + s.size as u64),
-            self.syms
-                .iter()
+            syms.iter()
                 .filter(|s| s.lang == SymbolLang::C)
                 .filter(|s| s.sym_type.mem_region() == MemoryRegion::Ram)
                 .fold(0, |acc, s| acc + s.size as u64),
         );
 
         let cpp = TotalMem::new(
-            self.syms
-                .iter()
+            syms.iter()
                 .filter(|s| s.lang == SymbolLang::Cpp)
                 .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
                 .fold(0, |acc, s| acc + s.size as u64),
-            self.syms
-                .iter()
+            syms.iter()
                 .filter(|s| s.lang == SymbolLang::Cpp)
                 .filter(|s| s.sym_type.mem_region() == MemoryRegion::Ram)
                 .fold(0, |acc, s| acc + s.size as u64),
         );
 
         let rust = TotalMem::new(
-            self.syms
-                .iter()
+            syms.iter()
                 .filter(|s| s.lang == SymbolLang::Rust)
                 .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
                 .fold(0, |acc, s| acc + s.size as u64),
-            self.syms
-                .iter()
+            syms.iter()
                 .filter(|s| s.lang == SymbolLang::Rust)
                 .filter(|s| s.sym_type.mem_region() == MemoryRegion::Ram)
                 .fold(0, |acc, s| acc + s.size as u64),
         );
-        LangReport::new(c, cpp, rust)
+        Some(LangReport::new(c, cpp, rust))
     }
 
     /// Creates a symbol report starting with the largest symbols for the
@@ -220,8 +217,8 @@ impl Atlas {
         lang: Vec<SymbolLang>,
         mem_type: MemoryRegion,
         max_count: Option<usize>,
-    ) -> SymbolReport<impl Iterator<Item = &Symbol> + Clone> {
-        let iter = self.syms.iter().rev();
+    ) -> Option<SymbolReport<impl Iterator<Item = &Symbol> + Clone>> {
+        let iter = self.syms.as_ref()?.iter().rev();
         let iter =
             iter.filter(move |s| (lang.contains(&SymbolLang::Any)) || (lang.contains(&s.lang)));
         let iter = iter.filter(move |s| {
@@ -233,6 +230,6 @@ impl Atlas {
             usize::MAX
         });
 
-        SymbolReport::new(iter)
+        Some(SymbolReport::new(iter))
     }
 }

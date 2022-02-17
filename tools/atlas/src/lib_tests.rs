@@ -89,23 +89,24 @@ mod tests {
         let mut at =
             Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
-        assert_eq!(at.syms.len(), 4142);
-        assert_eq!(at.fails.len(), 0);
-        assert_eq!(at.syms[0].addr, 0x2000b27c);
-        assert_eq!(at.syms[0].size, 0x00000001);
-        assert_eq!(at.syms[0].sym_type, sym::SymbolType::BssSection);
-        assert_eq!(at.syms[0].mangled, "backend_attached");
-        assert_eq!(at.syms[0].demangled, "backend_attached");
-        assert_eq!(at.syms[0].lang, sym::SymbolLang::C);
-        assert_eq!(at.syms[at.syms.len() - 1].addr, 0x200016c8);
-        assert_eq!(at.syms[at.syms.len() - 1].size, 0x000067f0);
+        assert_eq!(at.fails.as_ref().unwrap().len(), 0);
+        let syms = at.syms.as_ref().unwrap();
+        assert_eq!(syms.len(), 4142);
+        assert_eq!(syms[0].addr, 0x2000b27c);
+        assert_eq!(syms[0].size, 0x00000001);
+        assert_eq!(syms[0].sym_type, sym::SymbolType::BssSection);
+        assert_eq!(syms[0].mangled, "backend_attached");
+        assert_eq!(syms[0].demangled, "backend_attached");
+        assert_eq!(syms[0].lang, sym::SymbolLang::C);
+        assert_eq!(syms[syms.len() - 1].addr, 0x200016c8);
+        assert_eq!(syms[syms.len() - 1].size, 0x000067f0);
         assert_eq!(
-            at.syms[at.syms.len() - 1].sym_type,
+            syms[syms.len() - 1].sym_type,
             sym::SymbolType::BssSection
         );
-        assert_eq!(at.syms[at.syms.len() - 1].mangled, "_ZN2ot12gInstanceRawE");
-        assert_eq!(at.syms[at.syms.len() - 1].demangled, "ot::gInstanceRaw");
-        assert_eq!(at.syms[at.syms.len() - 1].lang, SymbolLang::Cpp);
+        assert_eq!(syms[syms.len() - 1].mangled, "_ZN2ot12gInstanceRawE");
+        assert_eq!(syms[syms.len() - 1].demangled, "ot::gInstanceRaw");
+        assert_eq!(syms[syms.len() - 1].lang, SymbolLang::Cpp);
     }
 
     // Shell command:
@@ -115,7 +116,7 @@ mod tests {
         let mut at =
             Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
-        let mut iter = at.syms.iter().rev().take(3);
+        let mut iter = at.syms.as_ref().unwrap().iter().rev().take(3);
         let s = iter.next().unwrap();
         assert_eq!(s.addr, 0x200016c8);
         assert_eq!(s.size, 0x000067f0);
@@ -139,6 +140,8 @@ mod tests {
         assert!(at.analyze().is_ok());
         let mut iter = at
             .syms
+            .as_ref()
+            .unwrap()
             .iter()
             .filter(|s| s.lang == SymbolLang::Rust)
             .take(3);
@@ -167,6 +170,8 @@ mod tests {
         assert!(at.analyze().is_ok());
         let mut iter = at
             .syms
+            .as_ref()
+            .unwrap()
             .iter()
             .rev()
             .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
@@ -194,6 +199,8 @@ mod tests {
         assert!(at.analyze().is_ok());
         let mut iter = at
             .syms
+            .as_ref()
+            .unwrap()
             .iter()
             .filter(|s| (s.lang == SymbolLang::Rust) || (s.lang == SymbolLang::C))
             .filter(|s| (s.size >= 0x00000304) && (s.size < 0x0000400))
@@ -229,7 +236,7 @@ mod tests {
         let mut at =
             Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
-        let report = at.report_lang();
+        let report = at.report_lang().unwrap();
 
         assert_eq!(
             report.size(SymbolLang::Any, MemoryRegion::Both).as_u64(),
@@ -286,7 +293,7 @@ mod tests {
         let mut at =
             Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
-        let report = at.report_lang();
+        let report = at.report_lang().unwrap();
 
         assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Both) - 100_f64).abs() < 1e-8);
         assert!((report.size_pct(SymbolLang::C, MemoryRegion::Both) - 48.48584568).abs() < 1e-8);
@@ -309,7 +316,7 @@ mod tests {
         let mut at =
             Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
-        let report = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, Some(6));
+        let report = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, Some(6)).unwrap();
         assert_eq!(report.into_iter().count(), 6);
         let mut iter = report.into_iter();
         let s = iter.next().unwrap();
@@ -328,7 +335,7 @@ mod tests {
         let mut at =
             Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
-        let report = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, None);
+        let report = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, None).unwrap();
         assert_eq!(report.into_iter().count(), 4142);
     }
 
@@ -337,7 +344,7 @@ mod tests {
         let mut at =
             Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
-        let report = at.report_syms(vec![SymbolLang::C], MemoryRegion::Both, None);
+        let report = at.report_syms(vec![SymbolLang::C], MemoryRegion::Both, None).unwrap();
         assert_eq!(report.into_iter().count(), 2193);
         assert!(report.into_iter().all(|s| s.lang == SymbolLang::C));
     }
@@ -351,7 +358,7 @@ mod tests {
             vec![SymbolLang::C, SymbolLang::Rust],
             MemoryRegion::Both,
             None,
-        );
+        ).unwrap();
         assert_eq!(report.into_iter().count(), 2514);
         assert!(!report.into_iter().any(|s| s.lang == SymbolLang::Cpp));
     }

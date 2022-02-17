@@ -191,7 +191,7 @@ fn files_not_found() {
 fn largest_syms() {
     let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
-    let mut iter = at.syms.iter().rev().take(3);
+    let mut iter = at.syms.as_ref().unwrap().iter().rev().take(3);
     let s = iter.next().unwrap();
     assert_eq!(s.addr, 0x200016c8);
     assert_eq!(s.size, 0x000067f0);
@@ -209,6 +209,8 @@ fn filter_complex() {
     assert!(at.analyze().is_ok());
     let mut iter = at
         .syms
+        .as_ref()
+        .unwrap()
         .iter()
         .filter(|s| (s.lang == SymbolLang::Rust) || (s.lang == SymbolLang::C))
         .filter(|s| (s.size >= 0x00000304) && (s.size < 0x0000400))
@@ -243,7 +245,7 @@ fn filter_complex() {
 fn report_lang_size() {
     let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
-    let report = at.report_lang();
+    let report = at.report_lang().unwrap();
 
     assert_eq!(
         report.size(SymbolLang::Any, MemoryRegion::Both).as_u64(),
@@ -299,7 +301,7 @@ fn report_lang_size() {
 fn report_lang_size_pct() {
     let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
-    let report = at.report_lang();
+    let report = at.report_lang().unwrap();
 
     assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Both) - 100_f64).abs() < 1e-8);
     assert!((report.size_pct(SymbolLang::C, MemoryRegion::Both) - 48.48584568).abs() < 1e-8);
@@ -321,7 +323,7 @@ fn report_lang_size_pct() {
 fn report_func() {
     let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
-    let report = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, Some(6));
+    let report = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, Some(6)).unwrap();
     assert_eq!(report.into_iter().count(), 6);
     let mut iter = report.into_iter();
     let s = iter.next().unwrap();
@@ -343,7 +345,7 @@ fn report_func_double_lang() {
         vec![SymbolLang::C, SymbolLang::Rust],
         MemoryRegion::Both,
         None,
-    );
+    ).unwrap();
     assert_eq!(report.into_iter().count(), 2514);
     assert!(!report.into_iter().any(|s| s.lang == SymbolLang::Cpp));
 }
