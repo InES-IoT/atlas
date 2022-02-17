@@ -117,6 +117,7 @@ impl LangDetector {
     pub fn detect<T>(&self, mangled: T, demangled: T) -> Result<Symbol, Error>
     where
         T: TryInto<RawSymbol>,
+        Error: From<<T as TryInto<RawSymbol>>::Error>,
     {
         let mut sym = Symbol::from_rawsymbols(mangled, demangled)?;
 

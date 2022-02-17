@@ -377,25 +377,33 @@ impl Symbol {
     ///     "00008700 00000064 T demangled_name"
     /// ).unwrap();
     /// ```
+    ///
+    /// # Trait Bounds
+    /// The `?` operator performs an implicit conversion with the From<> trait on the error
+    /// value. Passing a &str as T will call `TryInto<RawSymbol> for &str` which comes from the
+    /// `TryFrom<&str> for RawSymbol` impl. The compiler doesn't know if the associated type
+    /// `Error` is the selected error type in the `Result<Self, Error>` returned by this method.
+    /// This can be solved by adding another trait bound
+    /// `<T as TryInto<RawSymbol>>::Error: Into<Error>,`. Unfortunately, this requires that
+    /// EVERY T that is passed into this method has `Error` as the associated error type.
+    /// If you now pass an already created `RawSymbol` into this function, the blanked impls come
+    /// into play. First `From<RawSymbol> for RawSymbol` which results in
+    /// `Into<RawSymbol for RawSymbol`. Then, `TryFrom<RawSymbol> for RawSymbol` with
+    /// `Infallible` as the associated error type and finally `TryInto<RawSymbol> for RawSymbol`
+    /// also with the associated error type `Infallible`. This then obviously fails, as this
+    /// has no `From` impl to convert this from `Infallible` to `Error`.
+    /// The collision with the blanket impls have been discussed in
+    /// [this issue](https://github.com/rust-lang/rust/issues/50133) but it seems like there is no
+    /// real solution yet. This is why the second trait bound needed to be added to ensure that the
+    /// associated Error type can be converted into an `Error`. In order to get rid of the error
+    /// with the `Infallible` type, an impl containing unreachable code had to be added to `Error`.
     pub fn from_rawsymbols<T>(mangled: T, demangled: T) -> Result<Self, Error>
     where
         T: TryInto<RawSymbol>,
+        Error: From<<T as TryInto<RawSymbol>>::Error>,
     {
-        // TODO:
-        // Check this again with the ? operator.
-        //
-        // Old comment:
-        // Didn't get the `?` operator to work because of trait requirements
-        // revolving around `SymbolParseError`.
-        let mangled = match mangled.try_into() {
-            Ok(mangled) => mangled,
-            Err(_) => return Err(Error::new(ErrorKind::InvalidSymbol)),
-        };
-
-        let demangled = match demangled.try_into() {
-            Ok(demangled) => demangled,
-            Err(_) => return Err(Error::new(ErrorKind::InvalidSymbol)),
-        };
+        let mangled = mangled.try_into()?;
+        let demangled = demangled.try_into()?;
 
         if (mangled.addr != demangled.addr)
             || (mangled.size != demangled.size)
@@ -425,6 +433,7 @@ impl Symbol {
     ) -> Result<Self, Error>
     where
         T: TryInto<RawSymbol>,
+        Error: From<<T as TryInto<RawSymbol>>::Error>,
     {
         let mut s = Symbol::from_rawsymbols(mangled, demangled)?;
         s.lang = lang;

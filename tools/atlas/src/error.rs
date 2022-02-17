@@ -91,3 +91,10 @@ impl fmt::Display for Error {
         write!(f, "Atlas error (kind: {:?})", self.kind)
     }
 }
+
+impl From<std::convert::Infallible> for Error {
+    /// See explanation in [`crate::sym::Symbol::from_rawsymbols`].
+    fn from(_: std::convert::Infallible) -> Self {
+        unreachable!()
+    }
+}
