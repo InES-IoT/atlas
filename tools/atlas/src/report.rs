@@ -53,7 +53,7 @@ pub struct LangReport {
 
 impl LangReport {
     /// Creates a new [`LangReport`].
-    pub fn new(c: TotalMem, cpp: TotalMem, rust: TotalMem) -> Self {
+    pub(crate) fn new(c: TotalMem, cpp: TotalMem, rust: TotalMem) -> Self {
         LangReport { c, cpp, rust }
     }
 
@@ -197,7 +197,7 @@ where
     /// This type is intended to be created by the [`crate::Atlas::report_syms`] method
     /// which creates an iterator with filters applied to narrow down the
     /// contained symbols.
-    pub fn new(iter: I) -> SymbolReport<'a, I> {
+    pub(crate) fn new(iter: I) -> SymbolReport<'a, I> {
         SymbolReport { iter }
     }
 
