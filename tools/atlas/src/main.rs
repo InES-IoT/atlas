@@ -67,8 +67,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         let lang_rep = at.report_lang().unwrap();
         lang_rep.print(region, args.human, &mut std::io::stdout())?;
     } else {
-        let func_rep = at.report_syms(lang, region, args.count).unwrap();
-        func_rep.print(args.human, &mut std::io::stdout())?;
+        let syms_rep = at.report_syms(lang, region, args.count).unwrap();
+        syms_rep.print(args.human, &mut std::io::stdout())?;
     }
 
     Ok(())

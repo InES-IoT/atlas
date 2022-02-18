@@ -66,14 +66,14 @@ impl LangReport {
     // TODO:
     // This should probably be reverted to returning integers instead of
     // ByteSize.
-    pub fn size(&self, lang: SymbolLang, mem_type: MemoryRegion) -> ByteSize {
+    pub fn size(&self, lang: SymbolLang, mem_region: MemoryRegion) -> ByteSize {
         let mem = match lang {
             SymbolLang::C => self.c,
             SymbolLang::Cpp => self.cpp,
             SymbolLang::Rust => self.rust,
             SymbolLang::Any => self.c + self.cpp + self.rust,
         };
-        match mem_type {
+        match mem_region {
             MemoryRegion::Rom => mem.rom,
             MemoryRegion::Ram => mem.ram,
             MemoryRegion::Both => mem.rom + mem.ram,
@@ -95,9 +95,9 @@ impl LangReport {
     /// Rust takes up 12.3% of all the symbols residing in ROM.
     ///
     /// [`size`]: LangReport::size
-    pub fn size_pct(&self, lang: SymbolLang, mem_type: MemoryRegion) -> f64 {
-        let sum = self.size(SymbolLang::Any, mem_type).as_u64() as f64;
-        let size = self.size(lang, mem_type).as_u64() as f64;
+    pub fn size_pct(&self, lang: SymbolLang, mem_region: MemoryRegion) -> f64 {
+        let sum = self.size(SymbolLang::Any, mem_region).as_u64() as f64;
+        let size = self.size(lang, mem_region).as_u64() as f64;
 
         100_f64 * size / sum
     }
@@ -120,7 +120,7 @@ impl LangReport {
     ) -> Result<usize, Error> {
         let mut table = Table::new();
 
-        for x in self.iter(mem_type).rev() {
+        for x in self.iter_region(mem_type).rev() {
             // TODO:
             // Implement Display for SymbolLang to get rid of this line.
             let lang_string = format!("{:?}", x.0);
@@ -150,9 +150,9 @@ impl LangReport {
     /// according to the size with the smallest being the first. Use the
     /// `.rev()` method on the iterator if you want it to start with the largest
     /// one.
-    pub fn iter(
+    pub fn iter_region(
         &self,
-        mem_type: MemoryRegion
+        mem_region: MemoryRegion
     ) -> std::vec::IntoIter<(SymbolLang, ByteSize, f64)> {
         // NOTE:
         // In order to be able to sort something, you HAVE to have all the data.
@@ -162,18 +162,18 @@ impl LangReport {
         let mut data = vec![
             (
                 SymbolLang::C,
-                self.size(SymbolLang::C, mem_type),
-                self.size_pct(SymbolLang::C, mem_type),
+                self.size(SymbolLang::C, mem_region),
+                self.size_pct(SymbolLang::C, mem_region),
             ),
             (
                 SymbolLang::Cpp,
-                self.size(SymbolLang::Cpp, mem_type),
-                self.size_pct(SymbolLang::Cpp, mem_type),
+                self.size(SymbolLang::Cpp, mem_region),
+                self.size_pct(SymbolLang::Cpp, mem_region),
             ),
             (
                 SymbolLang::Rust,
-                self.size(SymbolLang::Rust, mem_type),
-                self.size_pct(SymbolLang::Rust, mem_type),
+                self.size(SymbolLang::Rust, mem_region),
+                self.size_pct(SymbolLang::Rust, mem_region),
             ),
         ];
         data.sort_by_key(|x| x.1);

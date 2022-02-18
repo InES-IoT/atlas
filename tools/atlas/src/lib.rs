@@ -215,14 +215,14 @@ impl Atlas {
     pub fn report_syms(
         &self,
         lang: Vec<SymbolLang>,
-        mem_type: MemoryRegion,
+        mem_region: MemoryRegion,
         max_count: Option<usize>,
     ) -> Option<SymbolReport<impl Iterator<Item = &Symbol> + Clone>> {
         let iter = self.syms.as_ref()?.iter().rev();
         let iter =
             iter.filter(move |s| (lang.contains(&SymbolLang::Any)) || (lang.contains(&s.lang)));
         let iter = iter.filter(move |s| {
-            (mem_type == MemoryRegion::Both) || (s.sym_type.mem_region() == mem_type)
+            (mem_region == MemoryRegion::Both) || (s.sym_type.mem_region() == mem_region)
         });
         let iter = iter.take(if let Some(count) = max_count {
             count

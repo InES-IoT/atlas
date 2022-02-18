@@ -187,6 +187,8 @@ fn files_not_found() {
     assert_eq!(original_error.kind(), std::io::ErrorKind::NotFound);
 }
 
+// Shell command:
+// arm-none-eabi-nm --print-size --size-sort --demangle rust_minimal_node.elf
 #[test]
 fn largest_syms() {
     let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
@@ -203,6 +205,70 @@ fn largest_syms() {
     assert_eq!(s.lang, SymbolLang::C);
 }
 
+// Shell command:
+// arm-none-eabi-nm --print-size --size-sort rust_minimal_node.elf | rg -n "^[[:xdigit:]]{8} [[:xdigit:]]{8} \w _.*\$" | head -n 30
+//
+// The first three symbols with "core" at the beginning are the smallest
+// Rust symbols.
+#[test]
+fn filter_rust() {
+    let mut at =
+        Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    assert!(at.analyze().is_ok());
+    let mut iter = at
+        .syms
+        .as_ref()
+        .unwrap()
+        .iter()
+        .filter(|s| s.lang == SymbolLang::Rust)
+        .take(3);
+    let s = iter.next().unwrap();
+    assert_eq!(s.addr, 0x00032570);
+    assert_eq!(s.size, 0x00000002);
+    let s = iter.next().unwrap();
+    assert_eq!(s.sym_type, SymbolType::TextSection);
+    assert_eq!(
+        s.mangled,
+        "_ZN4core3ptr27drop_in_place$LT$$RF$u8$GT$17h64bdfd13e30b9ce4E"
+    );
+    let s = iter.next().unwrap();
+    assert_eq!(s.demangled, "core::str::lossy::Utf8Lossy::from_bytes");
+    assert_eq!(s.lang, SymbolLang::Rust);
+}
+
+// Shell command:
+// arm-none-eabi-nm --print-size --size-sort --demangle rust_minimal_node.elf | rg -n "^[[:xdigit:]]{8} [[:xdigit:]]{8} \w .*\$"
+//
+// Extract the three largest symbols in the ROM region by hand.
+#[test]
+fn filter_memregion() {
+    let mut at =
+        Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    assert!(at.analyze().is_ok());
+    let mut iter = at
+        .syms
+        .as_ref()
+        .unwrap()
+        .iter()
+        .rev()
+        .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
+        .take(3);
+    let s = iter.next().unwrap();
+    assert_eq!(s.addr, 0x000013ec);
+    assert_eq!(s.size, 0x00000780);
+    let s = iter.next().unwrap();
+    assert_eq!(s.sym_type, SymbolType::TextSection);
+    assert_eq!(s.mangled, "shell_process");
+    let s = iter.next().unwrap();
+    assert_eq!(s.demangled, "memchr::memchr::fallback::memchr");
+    assert_eq!(s.lang, SymbolLang::Rust);
+}
+
+// Shell command:
+// arm-none-eabi-nm --print-size --size-sort --demangle rust_minimal_node.elf | rg -n "^[[:xdigit:]]{8} [[:xdigit:]]{8} [tT] .*\$"
+//
+// Get the first and last Rust or C symbol with a size in
+// [0x00000304;0x00000400[ and the type "t" or "T".
 #[test]
 fn filter_complex() {
     let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
@@ -320,7 +386,7 @@ fn report_lang_size_pct() {
 }
 
 #[test]
-fn report_func() {
+fn report_syms() {
     let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let report = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, Some(6)).unwrap();
@@ -338,7 +404,26 @@ fn report_func() {
 }
 
 #[test]
-fn report_func_double_lang() {
+fn report_syms_no_maxcount() {
+    let mut at =
+        Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    assert!(at.analyze().is_ok());
+    let report = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, None).unwrap();
+    assert_eq!(report.into_iter().count(), 4142);
+}
+
+#[test]
+fn report_syms_single_lang() {
+    let mut at =
+        Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    assert!(at.analyze().is_ok());
+    let report = at.report_syms(vec![SymbolLang::C], MemoryRegion::Both, None).unwrap();
+    assert_eq!(report.into_iter().count(), 2193);
+    assert!(report.into_iter().all(|s| s.lang == SymbolLang::C));
+}
+
+#[test]
+fn report_syms_double_lang() {
     let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let report = at.report_syms(
