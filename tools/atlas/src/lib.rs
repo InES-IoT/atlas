@@ -108,8 +108,8 @@ impl Atlas {
     /// stores the created symbols in the `syms` Vec. Failed symbols are stored
     /// in the `fails` Vec as a tuple of Strings (mangled, demangled).
     pub fn analyze(&mut self) -> Result<(), Error> {
-        let mut detector = LangDetector::new();
-        detector.add_rust_lib(&self.nm, &self.lib).unwrap();
+        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
+        detector.add_lib(&self.nm, SymbolLang::Rust, &self.lib).unwrap();
 
         let mangled_out = Command::new(&self.nm)
             .arg("--print-size")

@@ -123,8 +123,8 @@ fn detect_symbols() {
     lib.push("./aux/libsecprint.a");
     let lib = lib.canonicalize().unwrap();
     // let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
-    let mut detector = LangDetector::new();
-    detector.add_rust_lib(&*NM_PATH, lib).unwrap();
+    let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
+    detector.add_lib(&*NM_PATH, SymbolLang::Rust, lib).unwrap();
 
     // Cpp
     let s = detector.detect(
@@ -163,8 +163,8 @@ fn detect_symbols() {
 
 #[test]
 fn detect_permission_denied() {
-    let mut detector = LangDetector::new();
-    let err = detector.add_rust_lib("/etc/shadow", "/etc/shadow").unwrap_err();
+    let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
+    let err = detector.add_lib("/etc/shadow", SymbolLang::Rust, "/etc/shadow").unwrap_err();
 
     assert_eq!(err.kind(), ErrorKind::Nm);
     let cause = err.into_cause().unwrap();
