@@ -166,7 +166,7 @@ fn detect_permission_denied() {
     let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
     let err = detector.add_lib("/etc/shadow", SymbolLang::Rust, "/etc/shadow").unwrap_err();
 
-    assert_eq!(err.kind(), ErrorKind::Nm);
+    assert_eq!(err.kind(), ErrorKind::Io);
     let cause = err.into_cause().unwrap();
     let original_error = cause.downcast::<std::io::Error>().unwrap();
     assert_eq!(original_error.kind(), std::io::ErrorKind::PermissionDenied);

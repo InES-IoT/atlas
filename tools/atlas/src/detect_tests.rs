@@ -1,12 +1,10 @@
-// TODO:
-// Add tests with other library configurations (C, Cpp, none, multiple).
-
 #[cfg(test)]
 mod langdetector_tests {
     use super::super::*;
     use crate::sym::SymbolType;
     use crate::detect::Library;
     use lazy_static::lazy_static;
+    use std::io;
 
     lazy_static! {
         static ref NM_PATH: String = {
@@ -42,148 +40,204 @@ mod langdetector_tests {
     }
 
     #[test]
-    fn add_rust_lib() {
+    fn add_lib_bad_nm_path() {
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/libsecprint.a");
         let lib = lib.canonicalize().unwrap();
         let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        detector.add_lib(&*NM_PATH, SymbolLang::Rust, lib).unwrap();
-        assert_eq!(detector.libs[0].path.file_name().unwrap(), "libsecprint.a");
-        assert_eq!(detector.libs[0].lang, SymbolLang::Rust);
-        assert_eq!(detector.libs[0].syms.len(), 2493);
+        let err = detector.add_lib("/bad/path", SymbolLang::Rust, lib).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Io);
+        let cause = err.into_cause().unwrap();
+        let original_error = cause.downcast::<io::Error>().unwrap();
+        assert_eq!(original_error.kind(), io::ErrorKind::NotFound);
     }
 
     #[test]
-    fn add_rust_lib_bad_nm_path() {
+    fn add_lib_nm_permission_denied() {
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/libsecprint.a");
         let lib = lib.canonicalize().unwrap();
         let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        assert!(detector.add_lib("/bad/path", SymbolLang::Rust, lib).is_err());
+        let err = detector.add_lib("/etc/shadow", SymbolLang::Rust, lib).unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Io);
+        let cause = err.into_cause().unwrap();
+        let original_error = cause.downcast::<io::Error>().unwrap();
+        assert_eq!(original_error.kind(), io::ErrorKind::PermissionDenied);
     }
 
     #[test]
-    fn add_rust_lib_permission_denied() {
+    fn add_lib_bad_path() {
         let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        assert!(detector.add_lib(&*NM_PATH, SymbolLang::Rust, "/etc/shadow").is_err());
+        let err = detector.add_lib(&*NM_PATH, SymbolLang::Rust, "/does/not/exist").unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Io);
+        let cause = err.into_cause().unwrap();
+        let original_error = cause.downcast::<io::Error>().unwrap();
+        assert_eq!(original_error.kind(), io::ErrorKind::NotFound);
     }
 
     #[test]
-    fn detect_rust() {
+    fn add_lib_permission_denied() {
+        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
+        let err = detector.add_lib(&*NM_PATH, SymbolLang::Rust, "/etc/shadow").unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Io);
+        let cause = err.into_cause().unwrap();
+        let original_error = cause.downcast::<io::Error>().unwrap();
+        assert_eq!(original_error.kind(), io::ErrorKind::PermissionDenied);
+    }
+
+    #[test]
+    fn add_c_lib() {
         let mut lib = std::env::current_dir().unwrap();
-        lib.push("./aux/libsecprint.a");
+        lib.push("./aux/c_app_c_lib_rust_lib/libs/libc_lib.a");
         let lib = lib.canonicalize().unwrap();
         let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        detector.add_lib(&*NM_PATH, SymbolLang::Rust, lib).unwrap();
+        detector.add_lib(&*NM_PATH, SymbolLang::C, lib).unwrap();
+        assert_eq!(detector.libs[0].path.file_name().unwrap(), "libc_lib.a");
+        assert_eq!(detector.libs[0].lang, SymbolLang::C);
+        assert_eq!(detector.libs[0].syms.len(), 4);
+    }
+
+    #[test]
+    fn add_c_lib_rust_lib() {
+        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
+        let mut lib = std::env::current_dir().unwrap();
+        lib.push("./aux/c_app_c_lib_rust_lib/libs/libc_lib.a");
+        let c_lib = lib.canonicalize().unwrap();
+        detector.add_lib(&*NM_PATH, SymbolLang::C, c_lib).unwrap();
+        let mut lib = std::env::current_dir().unwrap();
+        lib.push("./aux/c_app_c_lib_rust_lib/libs/librust_lib.a");
+        let rust_lib = lib.canonicalize().unwrap();
+        detector.add_lib(&*NM_PATH, SymbolLang::Rust, rust_lib).unwrap();
+        assert_eq!(detector.libs[0].path.file_name().unwrap(), "libc_lib.a");
+        assert_eq!(detector.libs[0].lang, SymbolLang::C);
+        assert_eq!(detector.libs[0].syms.len(), 4);
+        assert_eq!(detector.libs[1].path.file_name().unwrap(), "librust_lib.a");
+        assert_eq!(detector.libs[1].lang, SymbolLang::Rust);
+        // TODO:
+        // The amount of symbols has been determined using Atlas itself. Verify this using nm and rg
+        // directly in the terminal.
+        assert_eq!(detector.libs[1].syms.len(), 1796);
+    }
+
+    #[test]
+    fn detect_c_no_lib() {
+        let detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
         let s = detector.detect(
-            "0002eda6 000000a6 T _ZN54_$LT$$BP$const$u20$T$u20$as$u20$core..fmt..Pointer$GT$3fmt17hde7d70127d765717E",
-            "0002eda6 000000a6 T <*const T as core::fmt::Pointer>::fmt"
+            "0000810e 00000024 t triple_mult",
+            "0000810e 00000024 t triple_mult",
         ).unwrap();
 
-        assert_eq!(s.addr, 0x0002eda6);
-        assert_eq!(s.size, 0x000000a6);
+        assert_eq!(s.addr, 0x0000810e);
+        assert_eq!(s.size, 0x00000024);
         assert_eq!(s.sym_type, SymbolType::TextSection);
-        assert_eq!(
-            s.mangled,
-            "_ZN54_$LT$$BP$const$u20$T$u20$as$u20$core..fmt..Pointer$GT$3fmt17hde7d70127d765717E"
-        );
-        assert_eq!(s.demangled, "<*const T as core::fmt::Pointer>::fmt");
-        assert_eq!(s.lang, SymbolLang::Rust);
-    }
-
-    #[test]
-    fn detect_rust_weird_generic() {
-        let mut lib = std::env::current_dir().unwrap();
-        lib.push("./aux/libsecprint.a");
-        let lib = lib.canonicalize().unwrap();
-        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        detector.add_lib(&*NM_PATH, SymbolLang::Rust, lib).unwrap();
-        let s = detector.detect(
-            "0002ece2 00000022 T _ZN4core3ptr77_$LT$impl$u20$core..fmt..Pointer$u20$for$u20$fn$LP$$RP$$u20$.$GT$$u20$Ret$GT$3fmt17h8b264a36c1e2f9a7E",
-            "0002ece2 00000022 T core::ptr::<impl core::fmt::Pointer for fn() -> Ret>::fmt"
-        ).unwrap();
-
-        assert_eq!(s.addr, 0x0002ece2);
-        assert_eq!(s.size, 0x00000022);
-        assert_eq!(s.sym_type, SymbolType::TextSection);
-        assert_eq!(
-            s.mangled,
-            "_ZN4core3ptr77_$LT$impl$u20$core..fmt..Pointer$u20$for$u20$fn$LP$$RP$$u20$.$GT$$u20$Ret$GT$3fmt17h8b264a36c1e2f9a7E"
-        );
-        assert_eq!(
-            s.demangled,
-            "core::ptr::<impl core::fmt::Pointer for fn() -> Ret>::fmt"
-        );
-        assert_eq!(s.lang, SymbolLang::Rust);
-    }
-
-    #[test]
-    fn detect_cpp() {
-        let mut lib = std::env::current_dir().unwrap();
-        lib.push("./aux/libsecprint.a");
-        let lib = lib.canonicalize().unwrap();
-        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        detector.add_lib(&*NM_PATH, SymbolLang::Rust, lib).unwrap();
-        let s = detector.detect(
-            "00023c0c 00000434 T _ZN2ot3Mle9MleRouter19HandleAdvertisementERKNS_7MessageERKNS_3Ip611MessageInfoEPNS_8NeighborE",
-            "00023c0c 00000434 T ot::Mle::MleRouter::HandleAdvertisement(ot::Message const&, ot::Ip6::MessageInfo const&, ot::Neighbor*)"
-        ).unwrap();
-
-        assert_eq!(s.addr, 0x00023c0c);
-        assert_eq!(s.size, 0x00000434);
-        assert_eq!(s.sym_type, SymbolType::TextSection);
-        assert_eq!(
-            s.mangled,
-            "_ZN2ot3Mle9MleRouter19HandleAdvertisementERKNS_7MessageERKNS_3Ip611MessageInfoEPNS_8NeighborE"
-        );
-        assert_eq!(
-            s.demangled,
-            "ot::Mle::MleRouter::HandleAdvertisement(ot::Message const&, ot::Ip6::MessageInfo const&, ot::Neighbor*)"
-        );
-        assert_eq!(s.lang, SymbolLang::Cpp);
-    }
-
-    #[test]
-    fn detect_c() {
-        let mut lib = std::env::current_dir().unwrap();
-        lib.push("./aux/libsecprint.a");
-        let lib = lib.canonicalize().unwrap();
-        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        detector.add_lib(&*NM_PATH, SymbolLang::Rust, lib).unwrap();
-        let s = detector
-            .detect(
-                "2000f0a0 00001020 B z_main_stack",
-                "2000f0a0 00001020 B z_main_stack",
-            )
-            .unwrap();
-
-        assert_eq!(s.addr, 0x2000f0a0);
-        assert_eq!(s.size, 0x00001020);
-        assert_eq!(s.sym_type, SymbolType::BssSection);
-        assert_eq!(s.mangled, "z_main_stack");
-        assert_eq!(s.demangled, "z_main_stack");
+        assert_eq!(s.mangled, "triple_mult");
+        assert_eq!(s.demangled, "triple_mult");
         assert_eq!(s.lang, SymbolLang::C);
     }
 
     #[test]
-    fn detect_rust_no_mangle() {
+    fn detect_rust_lib() {
         let mut lib = std::env::current_dir().unwrap();
-        lib.push("./aux/libsecprint.a");
-        let lib = lib.canonicalize().unwrap();
+        lib.push("./aux/c_app_rust_lib/libs/liblib.a");
+        let rust_lib = lib.canonicalize().unwrap();
         let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        detector.add_lib(&*NM_PATH, SymbolLang::Rust, lib).unwrap();
-        let s = detector
-            .detect(
-                "0002e6da 000000fa T rust_main",
-                "0002e6da 000000fa T rust_main",
-            )
-            .unwrap();
+        detector.add_lib(&*NM_PATH, SymbolLang::Rust, rust_lib).unwrap();
 
-        assert_eq!(s.addr, 0x0002e6da);
-        assert_eq!(s.size, 0x000000fa);
+        // Static variable
+        let s = detector.detect(
+            "00008f88 00000028 r _ZN3lib19RUST_LIB_STATIC_ARR17h4ebf6e8086b7e9a1E",
+            "00008f88 00000028 r lib::RUST_LIB_STATIC_ARR",
+        ).unwrap();
+        assert_eq!(s.addr, 0x00008f88);
+        assert_eq!(s.size, 0x00000028);
+        assert_eq!(s.sym_type, SymbolType::ReadOnlyDataSection);
+        assert_eq!(s.mangled, "_ZN3lib19RUST_LIB_STATIC_ARR17h4ebf6e8086b7e9a1E");
+        assert_eq!(s.demangled, "lib::RUST_LIB_STATIC_ARR");
+        assert_eq!(s.lang, SymbolLang::Rust);
+
+        // No mangle
+        let s = detector.detect(
+            "000081be 00000006 T rust_triple_mult",
+            "000081be 00000006 T rust_triple_mult",
+        ).unwrap();
+        assert_eq!(s.addr, 0x000081be);
+        assert_eq!(s.size, 0x00000006);
         assert_eq!(s.sym_type, SymbolType::TextSection);
-        assert_eq!(s.mangled, "rust_main");
-        assert_eq!(s.demangled, "rust_main");
+        assert_eq!(s.mangled, "rust_triple_mult");
+        assert_eq!(s.demangled, "rust_triple_mult");
+        assert_eq!(s.lang, SymbolLang::Rust);
+
+        // C
+        let s = detector.detect(
+            "00008112 00000024 t triple_mult",
+            "00008112 00000024 t triple_mult",
+        ).unwrap();
+        assert_eq!(s.addr, 0x00008112);
+        assert_eq!(s.size, 0x00000024);
+        assert_eq!(s.sym_type, SymbolType::TextSection);
+        assert_eq!(s.mangled, "triple_mult");
+        assert_eq!(s.demangled, "triple_mult");
+        assert_eq!(s.lang, SymbolLang::C);
+    }
+
+    #[test]
+    fn detect_c_lib_rust_lib() {
+        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
+        let mut lib = std::env::current_dir().unwrap();
+        lib.push("./aux/c_app_c_lib_rust_lib/libs/libc_lib.a");
+        let c_lib = lib.canonicalize().unwrap();
+        detector.add_lib(&*NM_PATH, SymbolLang::C, c_lib).unwrap();
+        let mut lib = std::env::current_dir().unwrap();
+        lib.push("./aux/c_app_c_lib_rust_lib/libs/librust_lib.a");
+        let rust_lib = lib.canonicalize().unwrap();
+        detector.add_lib(&*NM_PATH, SymbolLang::Rust, rust_lib).unwrap();
+
+        // C (not lib)
+        let s = detector.detect(
+            "000080f8 0000001a T add",
+            "000080f8 0000001a T add",
+        ).unwrap();
+        assert_eq!(s.addr, 0x000080f8);
+        assert_eq!(s.size, 0x0000001a);
+        assert_eq!(s.sym_type, SymbolType::TextSection);
+        assert_eq!(s.mangled, "add");
+        assert_eq!(s.demangled, "add");
+        assert_eq!(s.lang, SymbolLang::C);
+
+        // C lib
+        let s = detector.detect(
+            "00019090 00000029 d c_lib_static_arr",
+            "00019090 00000029 d c_lib_static_arr",
+        ).unwrap();
+        assert_eq!(s.addr, 0x00019090);
+        assert_eq!(s.size, 0x00000029);
+        assert_eq!(s.sym_type, SymbolType::DataSection);
+        assert_eq!(s.mangled, "c_lib_static_arr");
+        assert_eq!(s.demangled, "c_lib_static_arr");
+        assert_eq!(s.lang, SymbolLang::C);
+
+        // Rust lib
+        let s = detector.detect(
+            "00019078 00000018 d _ZN8rust_lib23RUST_LIB_STATIC_MUT_ARR17hb4123186c6513910E",
+            "00019078 00000018 d rust_lib::RUST_LIB_STATIC_MUT_ARR",
+        ).unwrap();
+        assert_eq!(s.addr, 0x00019078);
+        assert_eq!(s.size, 0x00000018);
+        assert_eq!(s.sym_type, SymbolType::DataSection);
+        assert_eq!(s.mangled, "_ZN8rust_lib23RUST_LIB_STATIC_MUT_ARR17hb4123186c6513910E");
+        assert_eq!(s.demangled, "rust_lib::RUST_LIB_STATIC_MUT_ARR");
+        assert_eq!(s.lang, SymbolLang::Rust);
+
+        // Rust lib no mangle
+        let s = detector.detect(
+            "000081dc 00000004 T rust_add",
+            "000081dc 00000004 T rust_add",
+        ).unwrap();
+        assert_eq!(s.addr, 0x000081dc);
+        assert_eq!(s.size, 0x00000004);
+        assert_eq!(s.sym_type, SymbolType::TextSection);
+        assert_eq!(s.mangled, "rust_add");
+        assert_eq!(s.demangled, "rust_add");
         assert_eq!(s.lang, SymbolLang::Rust);
     }
 }

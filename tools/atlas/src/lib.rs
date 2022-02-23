@@ -12,8 +12,7 @@
 
 #[macro_use]
 extern crate prettytable;
-
-pub use std::fs::File;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -116,7 +115,7 @@ impl Atlas {
             .arg("--size-sort")
             .arg(&self.elf)
             .output()
-            .map_err(|io_error| Error::new(ErrorKind::Nm).with(io_error))?;
+            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
 
         if !mangled_out.status.success() {
             return Err(Error::new(ErrorKind::Nm));
@@ -131,7 +130,7 @@ impl Atlas {
             .arg("--demangle")
             .arg(&self.elf)
             .output()
-            .map_err(|io_error| Error::new(ErrorKind::Nm).with(io_error))?;
+            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
 
         if !demangled_out.status.success() {
             return Err(Error::new(ErrorKind::Nm));

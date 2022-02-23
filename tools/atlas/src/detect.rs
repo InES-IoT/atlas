@@ -1,6 +1,7 @@
 use crate::error::{Error, ErrorKind};
 use crate::sym::{RawSymbol, Symbol, SymbolLang};
 use std::convert::TryInto;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -19,13 +20,6 @@ struct Library {
 
 /// Struct containing the necessary information to determine the origin language
 /// of [`Symbol`]s.
-///
-/// # Note:
-/// The name was given during a time when the origin language of a symbol could
-/// not be determined with absolute certainty. This should be renamed in a
-/// future release.
-// TODO:
-// Rewrite this struct with the builder pattern.
 #[derive(Debug)]
 pub struct LangDetector {
     default_lang: SymbolLang,
@@ -35,6 +29,9 @@ pub struct LangDetector {
 
 impl LangDetector {
     /// Creates a new [`LangDetector`].
+    // TODO:
+    // Make `default_mangled_lang` optional and return an error (or something) in case a mangled
+    // symbol is found that is not present in any of the libraries if this is set to None.
     pub fn new(default_lang: SymbolLang, default_mangled_lang: SymbolLang) -> Self {
         Self {
             default_lang,
@@ -53,11 +50,13 @@ impl LangDetector {
         T: AsRef<Path>,
         U: AsRef<Path>,
     {
+        let _ = File::open(lib_path.as_ref())?;
+
         let mangled_out = Command::new(nm.as_ref())
             .arg("--print-size")
             .arg(lib_path.as_ref())
             .output()
-            .map_err(|io_error| Error::new(ErrorKind::Nm).with(io_error))?;
+            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
 
         if !mangled_out.status.success() {
             return Err(Error::new(ErrorKind::Nm));
@@ -71,7 +70,7 @@ impl LangDetector {
             .arg("--demangle")
             .arg(lib_path.as_ref())
             .output()
-            .map_err(|io_error| Error::new(ErrorKind::Nm).with(io_error))?;
+            .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
 
         if !demangled_out.status.success() {
             return Err(Error::new(ErrorKind::Nm));
@@ -134,6 +133,7 @@ impl LangDetector {
     /// [`SymbolLang::Cpp`].
     ///
     /// [`add_rust_lib`]: LangDetector::add_rust_lib
+    // TODO:
     // Rename this method `detect_raw` and create a second method called `detect`.
     // This method will then only create the symbol from the rawsymbols and call
     // the `detect` method. This would allow the user to detect the language for
@@ -148,14 +148,14 @@ impl LangDetector {
         for lib in self.libs.iter() {
             if lib.syms.iter().any(|lib_sym| sym.related(lib_sym)) {
                 sym.lang = lib.lang;
-            } else {
-                if sym.mangled == sym.demangled {
-                    sym.lang = self.default_lang;
-                } else {
-                    sym.lang = self.default_mangled_lang;
-                }
+                return Ok(sym)
             }
+        }
 
+        if sym.mangled == sym.demangled {
+            sym.lang = self.default_lang;
+        } else {
+            sym.lang = self.default_mangled_lang;
         }
 
         Ok(sym)
