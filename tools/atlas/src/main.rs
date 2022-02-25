@@ -20,9 +20,17 @@ struct Args {
     #[clap(long)]
     elf: PathBuf,
 
+    /// Path to C library.
+    #[clap(long)]
+    clib: Vec<PathBuf>,
+
+    /// Path to Cpp library.
+    #[clap(long)]
+    cpplib: Vec<PathBuf>,
+
     /// Path to Rust library.
     #[clap(long)]
-    lib: PathBuf,
+    rlib: Vec<PathBuf>,
 
     /// Select the languages included in the function report. Multiple
     /// selections are possible. (any, c, cpp, rust)
@@ -61,7 +69,15 @@ fn main() -> Result<(), Box<dyn Error>> {
         .collect::<Result<Vec<_>, _>>()?;
 
     let mut at = Atlas::new(&args.nm, &args.elf)?;
-    at.add_lib(SymbolLang::Rust, &args.lib).unwrap();
+    for lib in &args.clib {
+        at.add_lib(SymbolLang::C, lib).unwrap();
+    }
+    for lib in &args.cpplib {
+        at.add_lib(SymbolLang::Cpp, lib).unwrap();
+    }
+    for lib in &args.rlib {
+        at.add_lib(SymbolLang::Rust, lib).unwrap();
+    }
     at.analyze()?;
 
     if args.summary {
