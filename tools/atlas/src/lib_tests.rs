@@ -88,38 +88,9 @@ mod tests {
     #[test]
     fn nm_wrong_file_type() {
         let mut at = Atlas::new(&*NM_PATH, "../README.md").unwrap();
-        at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
+        at.add_lib(SymbolLang::Rust, "aux/c_app_rust_lib/libs/liblib.a").unwrap();
         let err = at.analyze().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::Nm);
-    }
-
-    // TODO:
-    // Replace `rust_minimal_node.elf` used in these unittest with a handcrafted ELF file. Only use
-    // real files in the integration tests.
-    #[test]
-    fn analyze() {
-        let mut at =
-            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
-        at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
-        assert!(at.analyze().is_ok());
-        assert_eq!(at.fails.as_ref().unwrap().len(), 0);
-        let syms = at.syms.as_ref().unwrap();
-        assert_eq!(syms.len(), 4142);
-        assert_eq!(syms[0].addr, 0x2000b27c);
-        assert_eq!(syms[0].size, 0x00000001);
-        assert_eq!(syms[0].sym_type, sym::SymbolType::BssSection);
-        assert_eq!(syms[0].mangled, "backend_attached");
-        assert_eq!(syms[0].demangled, "backend_attached");
-        assert_eq!(syms[0].lang, sym::SymbolLang::C);
-        assert_eq!(syms[syms.len() - 1].addr, 0x200016c8);
-        assert_eq!(syms[syms.len() - 1].size, 0x000067f0);
-        assert_eq!(
-            syms[syms.len() - 1].sym_type,
-            sym::SymbolType::BssSection
-        );
-        assert_eq!(syms[syms.len() - 1].mangled, "_ZN2ot12gInstanceRawE");
-        assert_eq!(syms[syms.len() - 1].demangled, "ot::gInstanceRaw");
-        assert_eq!(syms[syms.len() - 1].lang, SymbolLang::Cpp);
     }
 
     #[test]
@@ -130,36 +101,143 @@ mod tests {
     }
 
     #[test]
+    fn analyze_c_no_lib() {
+        let mut at = Atlas::new(&*NM_PATH, "aux/c_app/app").unwrap();
+        at.analyze().unwrap();
+        assert_eq!(at.fails.as_ref().unwrap().len(), 0);
+        let syms = at.syms.as_ref().unwrap();
+        assert_eq!(syms.len(), 39);
+        assert_eq!(syms[0].addr, 0x000188dc);
+        assert_eq!(syms[0].size, 0x00000001);
+        assert_eq!(syms[0].sym_type, sym::SymbolType::BssSection);
+        assert_eq!(syms[0].mangled, "completed.8911");
+        assert_eq!(syms[0].demangled, "completed.8911");
+        assert_eq!(syms[0].lang, sym::SymbolLang::C);
+
+        assert_eq!(syms[syms.len() - 1].addr, 0x000184b0);
+        assert_eq!(syms[syms.len() - 1].size, 0x00000428);
+        assert_eq!(syms[syms.len() - 1].sym_type, sym::SymbolType::DataSection);
+        assert_eq!(syms[syms.len() - 1].mangled, "impure_data");
+        assert_eq!(syms[syms.len() - 1].demangled, "impure_data");
+        assert_eq!(syms[syms.len() - 1].lang, SymbolLang::C);
+    }
+
+    #[test]
+    fn analyze_c_app_rust_lib() {
+        let mut at = Atlas::new(&*NM_PATH, "aux/c_app_rust_lib/app").unwrap();
+        at.add_lib(SymbolLang::Rust, "aux/c_app_rust_lib/libs/liblib.a").unwrap();
+        at.analyze().unwrap();
+        assert_eq!(at.fails.as_ref().unwrap().len(), 0);
+        let syms = at.syms.as_ref().unwrap();
+        assert_eq!(syms.len(), 60);
+
+        // C
+        assert_eq!(syms[0].addr, 0x00019474);
+        assert_eq!(syms[0].size, 0x00000001);
+        assert_eq!(syms[0].sym_type, sym::SymbolType::BssSection);
+        assert_eq!(syms[0].mangled, "completed.8911");
+        assert_eq!(syms[0].demangled, "completed.8911");
+        assert_eq!(syms[0].lang, sym::SymbolLang::C);
+
+        // Rust no mangle
+        assert_eq!(syms[27].addr, 0x000081be);
+        assert_eq!(syms[27].size, 0x00000006);
+        assert_eq!(syms[27].sym_type, sym::SymbolType::TextSection);
+        assert_eq!(syms[27].mangled, "rust_triple_mult");
+        assert_eq!(syms[27].demangled, "rust_triple_mult");
+        assert_eq!(syms[27].lang, sym::SymbolLang::Rust);
+
+        // Rust static variable
+        assert_eq!(syms[38].addr, 0x00008f88);
+        assert_eq!(syms[38].size, 0x00000028);
+        assert_eq!(syms[38].sym_type, sym::SymbolType::ReadOnlyDataSection);
+        assert_eq!(syms[38].mangled, "_ZN3lib19RUST_LIB_STATIC_ARR17h4ebf6e8086b7e9a1E");
+        assert_eq!(syms[38].demangled, "lib::RUST_LIB_STATIC_ARR");
+        assert_eq!(syms[38].lang, sym::SymbolLang::Rust);
+
+        // C
+        assert_eq!(syms[syms.len() - 1].addr, 0x00019048);
+        assert_eq!(syms[syms.len() - 1].size, 0x00000428);
+        assert_eq!(syms[syms.len() - 1].sym_type, sym::SymbolType::DataSection);
+        assert_eq!(syms[syms.len() - 1].mangled, "impure_data");
+        assert_eq!(syms[syms.len() - 1].demangled, "impure_data");
+        assert_eq!(syms[syms.len() - 1].lang, SymbolLang::C);
+    }
+
+    #[test]
+    fn analyze_c_app_c_lib_rust_lib() {
+        let mut at = Atlas::new(&*NM_PATH, "aux/c_app_c_lib_rust_lib/app").unwrap();
+        at.add_lib(SymbolLang::C, "aux/c_app_c_lib_rust_lib/libs/libc_lib.a").unwrap();
+        at.add_lib(SymbolLang::Rust, "aux/c_app_c_lib_rust_lib/libs/librust_lib.a").unwrap();
+        at.analyze().unwrap();
+        assert_eq!(at.fails.as_ref().unwrap().len(), 0);
+        let syms = at.syms.as_ref().unwrap();
+        assert_eq!(syms.len(), 64);
+
+        // C
+        assert_eq!(syms[10].addr, 0x00008fb4);
+        assert_eq!(syms[10].size, 0x00000002);
+        assert_eq!(syms[10].sym_type, sym::SymbolType::TextSection);
+        assert_eq!(syms[10].mangled, "_exit");
+        assert_eq!(syms[10].demangled, "_exit");
+        assert_eq!(syms[10].lang, sym::SymbolLang::C);
+
+        // Rust mutable static variable
+        assert_eq!(syms[34].addr, 0x00019078);
+        assert_eq!(syms[34].size, 0x00000018);
+        assert_eq!(syms[34].sym_type, sym::SymbolType::DataSection);
+        assert_eq!(syms[34].mangled, "_ZN8rust_lib23RUST_LIB_STATIC_MUT_ARR17hb4123186c6513910E");
+        assert_eq!(syms[34].demangled, "rust_lib::RUST_LIB_STATIC_MUT_ARR");
+        assert_eq!(syms[34].lang, sym::SymbolLang::Rust);
+
+        // C library
+        assert_eq!(syms[36].addr, 0x00008d7e);
+        assert_eq!(syms[36].size, 0x0000001a);
+        assert_eq!(syms[36].sym_type, sym::SymbolType::TextSection);
+        assert_eq!(syms[36].mangled, "c_add");
+        assert_eq!(syms[36].demangled, "c_add");
+        assert_eq!(syms[36].lang, sym::SymbolLang::C);
+
+        // Rust weak symbol (probably a compiler builtin)
+        assert_eq!(syms[61].addr, 0x00008218);
+        assert_eq!(syms[61].size, 0x0000014c);
+        assert_eq!(syms[61].sym_type, sym::SymbolType::Weak);
+        assert_eq!(syms[61].mangled, "memcpy");
+        assert_eq!(syms[61].demangled, "memcpy");
+        assert_eq!(syms[61].lang, SymbolLang::Rust);
+    }
+
+    #[test]
     fn report_lang() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
-        at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "aux/c_app_rust_lib/app").unwrap();
+        at.add_lib(SymbolLang::Rust, "aux/c_app_rust_lib/libs/liblib.a").unwrap();
         at.analyze().unwrap();
         let lang_rep = at.report_lang().unwrap();
-        assert_eq!(lang_rep.size(SymbolLang::Rust, MemoryRegion::Rom).as_u64(), 28981);
-        assert!((lang_rep.size_pct(SymbolLang::C, MemoryRegion::Both) - 48.48584568).abs() < 1e-8);
+        assert_eq!(lang_rep.size(SymbolLang::Rust, MemoryRegion::Rom).as_u64(), 0);
+        assert!((lang_rep.size_pct(SymbolLang::C, MemoryRegion::Both) - 0.0).abs() < 1e-8);
     }
 
     #[test]
     fn report_lang_iter() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
-        at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "aux/c_app_rust_lib/app").unwrap();
+        at.add_lib(SymbolLang::Rust, "aux/c_app_rust_lib/libs/liblib.a").unwrap();
         at.analyze().unwrap();
         let lang_rep = at.report_lang().unwrap();
         let mut iter = lang_rep.iter_region(MemoryRegion::Rom);
         let (lang, size, pct) = iter.next().unwrap();
         assert_eq!(lang, SymbolLang::Rust);
-        assert_eq!(size.as_u64(), 28981);
-        assert!((pct - 10.08680338).abs() < 1e-8);
+        assert_eq!(size.as_u64(), 0);
+        assert!((pct - 0.0).abs() < 1e-8);
         let (lang, size, pct) = iter.next().unwrap();
         assert_eq!(lang, SymbolLang::C);
-        assert_eq!(size.as_u64(), 126789);
-        assert!((pct - 44.12876415).abs() < 1e-8);
+        assert_eq!(size.as_u64(), 0);
+        assert!((pct - 0.0).abs() < 1e-8);
     }
 
     #[test]
     fn report_syms_iter() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
-        at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "aux/c_app_rust_lib/app").unwrap();
+        at.add_lib(SymbolLang::Rust, "aux/c_app_rust_lib/libs/liblib.a").unwrap();
         at.analyze().unwrap();
         let syms_rep = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, Some(6)).unwrap();
         assert_eq!(syms_rep.into_iter().count(), 6);
