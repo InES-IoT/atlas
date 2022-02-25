@@ -33,7 +33,7 @@ mod langdetector_tests {
     #[test]
     fn new() {
         let detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        let v: Vec<Library> = Vec::new();
+        let v: Vec<ParsedLibrary> = Vec::new();
         assert_eq!(detector.default_lang, SymbolLang::C);
         assert_eq!(detector.default_mangled_lang, SymbolLang::Cpp);
         assert_eq!(detector.libs, v);
@@ -41,11 +41,12 @@ mod langdetector_tests {
 
     #[test]
     fn add_lib_bad_nm_path() {
+        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/libsecprint.a");
         let lib = lib.canonicalize().unwrap();
-        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        let err = detector.add_lib("/bad/path", SymbolLang::Rust, lib).unwrap_err();
+        let lib = Library::new(SymbolLang::Rust, lib);
+        let err = detector.add_lib("/bad/path", &lib).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::Io);
         let cause = err.into_cause().unwrap();
         let original_error = cause.downcast::<io::Error>().unwrap();
@@ -54,11 +55,12 @@ mod langdetector_tests {
 
     #[test]
     fn add_lib_nm_permission_denied() {
+        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/libsecprint.a");
         let lib = lib.canonicalize().unwrap();
-        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        let err = detector.add_lib("/etc/shadow", SymbolLang::Rust, lib).unwrap_err();
+        let lib = Library::new(SymbolLang::Rust, lib);
+        let err = detector.add_lib("/etc/shadow", &lib).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::Io);
         let cause = err.into_cause().unwrap();
         let original_error = cause.downcast::<io::Error>().unwrap();
@@ -68,7 +70,8 @@ mod langdetector_tests {
     #[test]
     fn add_lib_bad_path() {
         let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        let err = detector.add_lib(&*NM_PATH, SymbolLang::Rust, "/does/not/exist").unwrap_err();
+        let lib = Library::new(SymbolLang::Rust, "/does/not/exist");
+        let err = detector.add_lib(&*NM_PATH, &lib).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::Io);
         let cause = err.into_cause().unwrap();
         let original_error = cause.downcast::<io::Error>().unwrap();
@@ -78,7 +81,8 @@ mod langdetector_tests {
     #[test]
     fn add_lib_permission_denied() {
         let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        let err = detector.add_lib(&*NM_PATH, SymbolLang::Rust, "/etc/shadow").unwrap_err();
+        let lib = Library::new(SymbolLang::Rust, "/etc/shadow");
+        let err = detector.add_lib(&*NM_PATH, &lib).unwrap_err();
         assert_eq!(err.kind(), ErrorKind::Io);
         let cause = err.into_cause().unwrap();
         let original_error = cause.downcast::<io::Error>().unwrap();
@@ -87,11 +91,12 @@ mod langdetector_tests {
 
     #[test]
     fn add_c_lib() {
+        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/c_app_c_lib_rust_lib/libs/libc_lib.a");
         let lib = lib.canonicalize().unwrap();
-        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        detector.add_lib(&*NM_PATH, SymbolLang::C, lib).unwrap();
+        let lib = Library::new(SymbolLang::C, lib);
+        detector.add_lib(&*NM_PATH, &lib).unwrap();
         assert_eq!(detector.libs[0].path.file_name().unwrap(), "libc_lib.a");
         assert_eq!(detector.libs[0].lang, SymbolLang::C);
         assert_eq!(detector.libs[0].syms.len(), 4);
@@ -103,11 +108,13 @@ mod langdetector_tests {
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/c_app_c_lib_rust_lib/libs/libc_lib.a");
         let c_lib = lib.canonicalize().unwrap();
-        detector.add_lib(&*NM_PATH, SymbolLang::C, c_lib).unwrap();
+        let c_lib = Library::new(SymbolLang::C, c_lib);
+        detector.add_lib(&*NM_PATH, &c_lib).unwrap();
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/c_app_c_lib_rust_lib/libs/librust_lib.a");
         let rust_lib = lib.canonicalize().unwrap();
-        detector.add_lib(&*NM_PATH, SymbolLang::Rust, rust_lib).unwrap();
+        let rust_lib = Library::new(SymbolLang::Rust, rust_lib);
+        detector.add_lib(&*NM_PATH, &rust_lib).unwrap();
         assert_eq!(detector.libs[0].path.file_name().unwrap(), "libc_lib.a");
         assert_eq!(detector.libs[0].lang, SymbolLang::C);
         assert_eq!(detector.libs[0].syms.len(), 4);
@@ -137,11 +144,12 @@ mod langdetector_tests {
 
     #[test]
     fn detect_rust_lib() {
+        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/c_app_rust_lib/libs/liblib.a");
         let rust_lib = lib.canonicalize().unwrap();
-        let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        detector.add_lib(&*NM_PATH, SymbolLang::Rust, rust_lib).unwrap();
+        let rust_lib = Library::new(SymbolLang::Rust, rust_lib);
+        detector.add_lib(&*NM_PATH, &rust_lib).unwrap();
 
         // Static variable
         let s = detector.detect(
@@ -186,11 +194,13 @@ mod langdetector_tests {
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/c_app_c_lib_rust_lib/libs/libc_lib.a");
         let c_lib = lib.canonicalize().unwrap();
-        detector.add_lib(&*NM_PATH, SymbolLang::C, c_lib).unwrap();
+        let c_lib = Library::new(SymbolLang::C, c_lib);
+        detector.add_lib(&*NM_PATH, &c_lib).unwrap();
         let mut lib = std::env::current_dir().unwrap();
         lib.push("./aux/c_app_c_lib_rust_lib/libs/librust_lib.a");
         let rust_lib = lib.canonicalize().unwrap();
-        detector.add_lib(&*NM_PATH, SymbolLang::Rust, rust_lib).unwrap();
+        let rust_lib = Library::new(SymbolLang::Rust, rust_lib);
+        detector.add_lib(&*NM_PATH, &rust_lib).unwrap();
 
         // C (not lib)
         let s = detector.detect(

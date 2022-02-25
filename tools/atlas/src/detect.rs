@@ -12,7 +12,25 @@ mod detect_tests;
 // TODO:
 // Path doesn't need to be owned (-> &Path).
 #[derive(Debug, PartialEq)]
-struct Library {
+pub struct Library {
+    path: PathBuf,
+    lang: SymbolLang,
+}
+
+impl Library {
+    pub fn new<T>(lang: SymbolLang, path: T) -> Self
+    where
+        T: AsRef<Path>
+    {
+        Self {
+            path: path.as_ref().to_path_buf(),
+            lang
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct ParsedLibrary {
     path: PathBuf,
     lang: SymbolLang,
     syms: Vec<Symbol>,
@@ -24,7 +42,7 @@ struct Library {
 pub struct LangDetector {
     default_lang: SymbolLang,
     default_mangled_lang: SymbolLang,
-    libs: Vec<Library>,
+    libs: Vec<ParsedLibrary>,
 }
 
 impl LangDetector {
@@ -40,21 +58,23 @@ impl LangDetector {
         }
     }
 
-    /// Parses and stores the symbols contained in the Rust library with the
-    /// supplied nm utility. This can then be used by the [`detect`] method for
-    /// determining if a symbol stems from a Rust library or not.
+    /// Parses and stores the symbols contained in the library with the supplied nm utility. This
+    /// can then be used by the [`detect`] method for determining if a symbol stems from a library
+    /// or not.
     ///
     /// [`detect`]: LangDetector::detect
-    pub fn add_lib<T, U>(&mut self, nm: T, lang: SymbolLang, lib_path: U) -> Result<(), Error>
+    pub fn add_lib<T>(&mut self, nm: T, lib: &Library) -> Result<(), Error>
     where
         T: AsRef<Path>,
-        U: AsRef<Path>,
     {
-        let _ = File::open(lib_path.as_ref())?;
+        // This check makes sure that an ErrorKind::Io error is returned if the libary file cannot
+        // be found. Otherwhise, nm would still run but not succeed, thus resulting in an
+        // ErrorKind::Nm error.
+        let _ = File::open(&lib.path)?;
 
         let mangled_out = Command::new(nm.as_ref())
             .arg("--print-size")
-            .arg(lib_path.as_ref())
+            .arg(&lib.path)
             .output()
             .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
 
@@ -68,7 +88,7 @@ impl LangDetector {
         let demangled_out = Command::new(nm.as_ref())
             .arg("--print-size")
             .arg("--demangle")
-            .arg(lib_path.as_ref())
+            .arg(&lib.path)
             .output()
             .map_err(|io_error| Error::new(ErrorKind::Io).with(io_error))?;
 
@@ -79,9 +99,9 @@ impl LangDetector {
         let demangled_str = std::str::from_utf8(&demangled_out.stdout)
             .map_err(|str_error| Error::new(ErrorKind::Nm).with(str_error))?;
 
-        let mut lib = Library {
-            path: lib_path.as_ref().to_owned(),
-            lang,
+        let mut parsed_lib = ParsedLibrary {
+            path: lib.path.clone(),
+            lang: lib.lang,
             syms: Vec::new(),
         };
 
@@ -110,29 +130,28 @@ impl LangDetector {
                             .chars()
                             .all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'))
                         {
-                            lib.syms.push(s);
+                            parsed_lib.syms.push(s);
                         }
                     }
                 }
             } else {
-                lib.syms.push(s);
+                parsed_lib.syms.push(s);
             }
         }
 
-        self.libs.push(lib);
+        self.libs.push(parsed_lib);
 
         Ok(())
     }
 
     /// Detect the origin language of symbol. First, this checks if the symbol
     /// is related (using [`Symbol::related`]) to any of the symbols parsed from
-    /// the Rust library with [`add_rust_lib`] and set to [`SymbolLang::Rust`].
-    /// If it isn't related to any of them, the language is set to
-    /// [`SymbolLang::C`] if the mangled and demangled name of the symbol is the
-    /// same (C doesn't have name mangling). Otherwise, it is set to
-    /// [`SymbolLang::Cpp`].
+    /// the libraries with [`add_lib`].
+    /// If it isn't related to any of them, the language is set to the default stored in the
+    /// `default_lang` member of Self if the mangled and demangled name of the symbol is the
+    /// same. Otherwise, it is set to `default_mangled_lang`.
     ///
-    /// [`add_rust_lib`]: LangDetector::add_rust_lib
+    /// [`add_lib`]: LangDetector::add_lib
     // TODO:
     // Rename this method `detect_raw` and create a second method called `detect`.
     // This method will then only create the symbol from the rawsymbols and call

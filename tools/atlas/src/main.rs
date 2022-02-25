@@ -1,5 +1,5 @@
-use atlas::sym::{MemoryRegion, SymbolLang};
 use atlas::Atlas;
+use atlas::sym::{MemoryRegion, SymbolLang};
 use clap::Parser;
 use std::error::Error;
 use std::path::PathBuf;
@@ -60,7 +60,8 @@ fn main() -> Result<(), Box<dyn Error>> {
         .map(|l| l.to_lowercase().as_str().parse::<SymbolLang>())
         .collect::<Result<Vec<_>, _>>()?;
 
-    let mut at = Atlas::new(&args.nm, &args.elf, &args.lib)?;
+    let mut at = Atlas::new(&args.nm, &args.elf)?;
+    at.add_lib(SymbolLang::Rust, &args.lib).unwrap();
     at.analyze()?;
 
     if args.summary {

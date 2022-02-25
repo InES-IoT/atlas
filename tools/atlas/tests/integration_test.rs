@@ -4,9 +4,8 @@
 //! folder. Maybe all the tests requiring such files should be placed in the
 //! integration tests and not in the unittests.
 
-use atlas::{Atlas, ErrorKind, LangDetector, MemoryRegion, Symbol, SymbolLang, SymbolType};
+use atlas::{Atlas, ErrorKind, LangDetector, Library, MemoryRegion, Symbol, SymbolLang, SymbolType};
 use lazy_static::lazy_static;
-use std::path::PathBuf;
 use std::process::Command;
 
 lazy_static! {
@@ -119,12 +118,13 @@ fn symbol_related() {
 
 #[test]
 fn detect_symbols() {
-    let mut lib = std::env::current_dir().unwrap();
-    lib.push("./aux/libsecprint.a");
-    let lib = lib.canonicalize().unwrap();
-    // let nm = std::env::var("NM_PATH").expect("NM_PATH env var not found!");
+    let mut lib_path = std::env::current_dir().unwrap();
+    lib_path.push("./aux/libsecprint.a");
+    let lib_path = lib_path.canonicalize().unwrap();
+
     let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-    detector.add_lib(&*NM_PATH, SymbolLang::Rust, lib).unwrap();
+    let lib = Library::new(SymbolLang::Rust, lib_path);
+    detector.add_lib(&*NM_PATH, &lib).unwrap();
 
     // Cpp
     let s = detector.detect(
@@ -164,7 +164,8 @@ fn detect_symbols() {
 #[test]
 fn detect_permission_denied() {
     let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-    let err = detector.add_lib("/etc/shadow", SymbolLang::Rust, "/etc/shadow").unwrap_err();
+    let lib = Library::new(SymbolLang::Rust, "/etc/shadow");
+    let err = detector.add_lib("/etc/shadow", &lib).unwrap_err();
 
     assert_eq!(err.kind(), ErrorKind::Io);
     let cause = err.into_cause().unwrap();
@@ -174,13 +175,13 @@ fn detect_permission_denied() {
 
 #[test]
 fn new_atlas() {
-    let at = Atlas::new(&*NM_PATH, PathBuf::from(file!()), file!());
+    let at = Atlas::new(&*NM_PATH, file!());
     assert!(at.is_ok());
 }
 
 #[test]
-fn files_not_found() {
-    let err = Atlas::new(&*NM_PATH, "kljsdflkjsdf", "ljksdflkjsdflsj").unwrap_err();
+fn elf_not_found() {
+    let err = Atlas::new(&*NM_PATH, "kljsdflkjsdf").unwrap_err();
     assert_eq!(err.kind(), ErrorKind::Io);
     let cause = err.into_cause().unwrap();
     let original_error = cause.downcast::<std::io::Error>().unwrap();
@@ -191,7 +192,8 @@ fn files_not_found() {
 // arm-none-eabi-nm --print-size --size-sort --demangle rust_minimal_node.elf
 #[test]
 fn largest_syms() {
-    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
+    at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let mut iter = at.syms.as_ref().unwrap().iter().rev().take(3);
     let s = iter.next().unwrap();
@@ -212,8 +214,8 @@ fn largest_syms() {
 // Rust symbols.
 #[test]
 fn filter_rust() {
-    let mut at =
-        Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
+    at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let mut iter = at
         .syms
@@ -242,8 +244,8 @@ fn filter_rust() {
 // Extract the three largest symbols in the ROM region by hand.
 #[test]
 fn filter_memregion() {
-    let mut at =
-        Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
+    at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let mut iter = at
         .syms
@@ -271,7 +273,8 @@ fn filter_memregion() {
 // [0x00000304;0x00000400[ and the type "t" or "T".
 #[test]
 fn filter_complex() {
-    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
+    at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let mut iter = at
         .syms
@@ -309,7 +312,8 @@ fn filter_complex() {
 // added to check if modification down the line change their outputs.
 #[test]
 fn report_lang_size() {
-    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
+    at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let report = at.report_lang().unwrap();
 
@@ -365,7 +369,8 @@ fn report_lang_size() {
 // See `report_lang_size`.
 #[test]
 fn report_lang_size_pct() {
-    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
+    at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let report = at.report_lang().unwrap();
 
@@ -387,7 +392,8 @@ fn report_lang_size_pct() {
 
 #[test]
 fn report_syms() {
-    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
+    at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let report = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, Some(6)).unwrap();
     assert_eq!(report.into_iter().count(), 6);
@@ -405,8 +411,8 @@ fn report_syms() {
 
 #[test]
 fn report_syms_no_maxcount() {
-    let mut at =
-        Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
+    at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let report = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, None).unwrap();
     assert_eq!(report.into_iter().count(), 4142);
@@ -414,8 +420,8 @@ fn report_syms_no_maxcount() {
 
 #[test]
 fn report_syms_single_lang() {
-    let mut at =
-        Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
+    at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let report = at.report_syms(vec![SymbolLang::C], MemoryRegion::Both, None).unwrap();
     assert_eq!(report.into_iter().count(), 2193);
@@ -424,7 +430,8 @@ fn report_syms_single_lang() {
 
 #[test]
 fn report_syms_double_lang() {
-    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+    let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
+    at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let report = at.report_syms(
         vec![SymbolLang::C, SymbolLang::Rust],

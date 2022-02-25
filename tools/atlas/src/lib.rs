@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 pub mod detect;
-pub use detect::LangDetector;
+pub use detect::{LangDetector, Library};
 
 pub mod error;
 pub use error::{Error, ErrorKind};
@@ -35,11 +35,10 @@ mod lib_tests;
 /// Conducts the analysis of the ELF file and generates report type for printing
 /// the gathered information.
 ///
-/// Access to the static Rust library used for building the executable allows to
-/// definitively determine if any given symbol originated from Rust code, even
-/// if `#[no_mangle]` was used. Then, mangled names are identified as Cpp
-/// symbols. Lastly, remaining symbols (only symbols without any mangling
-/// are remaining) are now identified as C.
+/// Access to the static libraries used for building the executable allows to
+/// definitively determine if any given symbol originated from a library, even
+/// if `#[no_mangle]` was used (in the case of Rust). The language of all
+/// remaining symbols are then set to the default values.
 // TODO:
 // - Compare the performance to using other collections (e.g. HashMap, BTreeMap)
 #[derive(Debug)]
@@ -48,8 +47,8 @@ pub struct Atlas {
     pub nm: PathBuf,
     /// Absolute path to the ELF binary
     pub elf: PathBuf,
-    /// Absolute path to the Rust static library
-    pub lib: PathBuf,
+    /// Absolute path to the static libraries
+    pub libs: Vec<Library>,
     /// Vector containing the symbols with their identified origin language.
     pub syms: Option<Vec<Symbol>>,
     /// Vector containing the strings (mangled and demangled) of all symbols
@@ -67,15 +66,12 @@ impl Atlas {
     /// building the ELF file as otherwise errors could occur while demangling
     /// of the Rust and Cpp symbols.
     ///
-    /// For the `lib` argument, provide the path to the static Rust library used
-    /// when building the ELF file.
     ///
     /// All path provided can either be absolute or relative.
-    pub fn new<N, E, L>(nm: N, elf: E, lib: L) -> Result<Self, Error>
+    pub fn new<N, E>(nm: N, elf: E) -> Result<Self, Error>
     where
         N: AsRef<Path>,
         E: AsRef<Path>,
-        L: AsRef<Path>,
     {
         let curr = std::env::current_dir().unwrap();
 
@@ -85,30 +81,51 @@ impl Atlas {
         let elf = curr
             .join(elf.as_ref())
             .canonicalize()?;
-        let lib = curr
-            .join(lib.as_ref())
-            .canonicalize()?;
 
         // Check permission by opening and closing files
         let _ = File::open(&nm)?;
         let _ = File::open(&elf)?;
-        let _ = File::open(&lib)?;
 
         Ok(Atlas {
             nm,
             elf,
-            lib,
+            libs: Vec::new(),
             syms: None,
             fails: None,
         })
     }
 
-    /// Analyzes the ELF file using the nm utility and static Rust library, and
+    /// Adds libraries to the [`Atlas`] struct which will be used to determine
+    /// their origin when calling [`analyze`]. The path can be either absolute
+    /// or relative.
+    pub fn add_lib<T>(&mut self, lang: SymbolLang, lib_path: T) -> Result<(), Error>
+    where
+        T: AsRef<Path>,
+    {
+        let curr = std::env::current_dir().unwrap();
+
+        let lib = curr
+            .join(lib_path.as_ref())
+            .canonicalize()?;
+
+        // Check permission by opening and closing files
+        let _ = File::open(&lib)?;
+
+        let lib = Library::new(lang, lib);
+
+        self.libs.push(lib);
+
+        Ok(())
+    }
+
+    /// Analyzes the ELF file using the nm utility and static libraries, and
     /// stores the created symbols in the `syms` Vec. Failed symbols are stored
     /// in the `fails` Vec as a tuple of Strings (mangled, demangled).
     pub fn analyze(&mut self) -> Result<(), Error> {
         let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
-        detector.add_lib(&self.nm, SymbolLang::Rust, &self.lib).unwrap();
+        for lib in &self.libs {
+            detector.add_lib(&self.nm, lib).unwrap();
+        }
 
         let mangled_out = Command::new(&self.nm)
             .arg("--print-size")

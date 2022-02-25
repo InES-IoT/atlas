@@ -31,55 +31,64 @@ mod tests {
 
     #[test]
     fn new_str() {
-        let at = Atlas::new(&*NM_PATH, file!(), file!());
+        let at = Atlas::new(&*NM_PATH, file!());
         assert!(at.is_ok());
     }
 
     #[test]
     fn new_string() {
-        let at = Atlas::new(&*NM_PATH, String::from(file!()), String::from(file!()));
+        let at = Atlas::new(&*NM_PATH, String::from(file!()));
         assert!(at.is_ok());
     }
 
     #[test]
     fn new_pathbuf() {
-        let at = Atlas::new(&*NM_PATH, PathBuf::from(file!()), PathBuf::from(file!()));
+        let at = Atlas::new(&*NM_PATH, PathBuf::from(file!()));
         assert!(at.is_ok());
     }
 
     #[test]
     fn new_path() {
-        let at = Atlas::new(&*NM_PATH, Path::new(file!()), Path::new(file!()));
+        let at = Atlas::new(&*NM_PATH, Path::new(file!()));
         assert!(at.is_ok());
     }
 
     #[test]
-    fn new_mixed() {
-        let at = Atlas::new(&*NM_PATH, PathBuf::from(file!()), file!());
-        assert!(at.is_ok());
+    fn new_elf_not_found() {
+        let err = Atlas::new(&*NM_PATH, "kljsdflkjsdf").unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Io);
     }
 
     #[test]
-    fn new_canonicalize() {
-        let at = Atlas::new(&*NM_PATH, "/etc/hostname", "./aux/../src/../Cargo.toml");
-        assert!(at.is_ok());
+    fn new_permission_denied() {
+        let err = Atlas::new(&*NM_PATH, "/etc/shadow").unwrap_err();
+        assert_eq!(err.kind(), ErrorKind::Io);
     }
 
     #[test]
-    fn illegal_path() {
-        let err = Atlas::new(&*NM_PATH, "kljsdflkjsdf", "ljksdflkjsdflsj").unwrap_err();
+    fn add_lib_canonicalize() {
+        let mut at = Atlas::new(&*NM_PATH,  file!()).unwrap();
+        at.add_lib(SymbolLang::Rust, "./aux/../src/../Cargo.toml").unwrap();
+    }
+
+    #[test]
+    fn add_lib_not_found() {
+        let mut at = Atlas::new(&*NM_PATH,  file!()).unwrap();
+        let err = at.add_lib(SymbolLang::Rust, "lksjdflkjsdflkjsdf").unwrap_err();
         assert_eq!(err.kind(), ErrorKind::Io);
     }
 
     #[test]
     fn permission_denied() {
-        let err = Atlas::new(&*NM_PATH, file!(), "/etc/shadow").unwrap_err();
+        let mut at = Atlas::new(&*NM_PATH,  file!()).unwrap();
+        let err = at.add_lib(SymbolLang::Rust, "/etc/shadow").unwrap_err();
         assert_eq!(err.kind(), ErrorKind::Io);
     }
 
     #[test]
     fn nm_wrong_file_type() {
-        let mut at = Atlas::new(&*NM_PATH, "../README.md", "aux/libsecprint.a").unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "../README.md").unwrap();
+        at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
         let err = at.analyze().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::Nm);
     }
@@ -90,7 +99,8 @@ mod tests {
     #[test]
     fn analyze() {
         let mut at =
-            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
+        at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
         assert!(at.analyze().is_ok());
         assert_eq!(at.fails.as_ref().unwrap().len(), 0);
         let syms = at.syms.as_ref().unwrap();
@@ -114,15 +124,15 @@ mod tests {
 
     #[test]
     fn report_without_analyze() {
-        let at = Atlas::new(&*NM_PATH, file!(), file!()).unwrap();
+        let at = Atlas::new(&*NM_PATH, file!()).unwrap();
         assert!(at.report_lang().is_none());
         assert!(at.report_syms(vec![SymbolLang::Rust], MemoryRegion::Rom, None).is_none());
     }
 
     #[test]
     fn report_lang() {
-        let mut at =
-            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
+        at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
         at.analyze().unwrap();
         let lang_rep = at.report_lang().unwrap();
         assert_eq!(lang_rep.size(SymbolLang::Rust, MemoryRegion::Rom).as_u64(), 28981);
@@ -131,8 +141,8 @@ mod tests {
 
     #[test]
     fn report_lang_iter() {
-        let mut at =
-            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
+        at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
         at.analyze().unwrap();
         let lang_rep = at.report_lang().unwrap();
         let mut iter = lang_rep.iter_region(MemoryRegion::Rom);
@@ -148,8 +158,8 @@ mod tests {
 
     #[test]
     fn report_syms_iter() {
-        let mut at =
-            Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf", "aux/libsecprint.a").unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
+        at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
         at.analyze().unwrap();
         let syms_rep = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, Some(6)).unwrap();
         assert_eq!(syms_rep.into_iter().count(), 6);

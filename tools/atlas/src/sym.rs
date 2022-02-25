@@ -447,15 +447,10 @@ impl Symbol {
     /// - symbol type
     /// - size
     ///
-    /// This is needed to determine if a symbol was taken from a static Rust
+    /// This is needed to determine if a symbol was taken from a static
     /// library or not. The `addr` field is excluded from this check because the
-    /// linker takes symbols from the static Rust library and computes their
+    /// linker takes symbols from the static library and computes their
     /// absolute address before placing them into the ELF file.
-    /// Furthermore, this method is used to determine if a symbol comes from a
-    /// Rust library or not and therefore the `lang` field might still be set to
-    /// [`SymbolLang::Any`]. Comparing this to a symbol coming from a Rust
-    /// library (which should have its `lang` field be set to
-    /// [`SymbolLang::Rust`]) would always result in `false`.
     pub fn related(&self, other: &Symbol) -> bool {
         !((self.mangled != other.mangled)
             || (self.demangled != other.demangled)

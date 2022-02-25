@@ -64,7 +64,7 @@ impl Error {
     /// # use std::io;
     /// # use atlas::Atlas;
     /// // Cause an error by trying to open non-existing files.
-    /// let err = Atlas::new("/foo", "/bar", "/baz").unwrap_err();
+    /// let err = Atlas::new("/foo", "/bar").unwrap_err();
     /// let cause = err.into_cause().unwrap();
     /// let original_error = cause.downcast::<io::Error>().unwrap();
     /// assert_eq!(original_error.kind(), io::ErrorKind::NotFound);
