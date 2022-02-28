@@ -43,7 +43,7 @@ mod langdetector_tests {
     fn add_lib_bad_nm_path() {
         let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
         let mut lib = std::env::current_dir().unwrap();
-        lib.push("./aux/libsecprint.a");
+        lib.push("./aux/c_app_rust_lib/libs/liblib.a");
         let lib = lib.canonicalize().unwrap();
         let lib = Library::new(SymbolLang::Rust, lib);
         let err = detector.add_lib("/bad/path", &lib).unwrap_err();
@@ -57,7 +57,7 @@ mod langdetector_tests {
     fn add_lib_nm_permission_denied() {
         let mut detector = LangDetector::new(SymbolLang::C, SymbolLang::Cpp);
         let mut lib = std::env::current_dir().unwrap();
-        lib.push("./aux/libsecprint.a");
+        lib.push("./aux/c_app_rust_lib/libs/liblib.a");
         let lib = lib.canonicalize().unwrap();
         let lib = Library::new(SymbolLang::Rust, lib);
         let err = detector.add_lib("/etc/shadow", &lib).unwrap_err();
