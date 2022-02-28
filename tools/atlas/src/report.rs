@@ -120,7 +120,7 @@ impl LangReport {
     ) -> Result<usize, Error> {
         let mut table = Table::new();
 
-        for x in self.iter_region(mem_type).rev() {
+        for x in self.iter_region(mem_type) {
             // TODO:
             // Implement Display for SymbolLang to get rid of this line.
             let lang_string = format!("{:?}", x.0);
@@ -147,7 +147,7 @@ impl LangReport {
     /// Creates an iterator which returns a tuple for every language containing
     /// its size in bytes and the percentage relative to the sum of all
     /// languages. The items returned by the iterator are already sorted
-    /// according to the size with the smallest being the first. Use the
+    /// according to the size with the largest being the first. Use the
     /// `.rev()` method on the iterator if you want it to start with the largest
     /// one.
     pub fn iter_region(
@@ -176,7 +176,9 @@ impl LangReport {
                 self.size_pct(SymbolLang::Rust, mem_region),
             ),
         ];
-        data.sort_by_key(|x| x.1);
+
+        // Sort by size in reverse order (largest to smallest)
+        data.sort_by(|a, b| b.1.cmp(&a.1));
         data.into_iter()
     }
 }

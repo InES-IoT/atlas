@@ -98,17 +98,17 @@ mod langreport_tests {
 
         let mut iter = r.iter_region(MemoryRegion::Both);
         let (lang, size, pct) = iter.next().unwrap();
-        assert_eq!(lang, SymbolLang::Cpp);
-        assert_eq!(size.as_u64(), 40);
-        assert_eq!(pct, 20_f64);
+        assert_eq!(lang, SymbolLang::Rust);
+        assert_eq!(size.as_u64(), 110);
+        assert_eq!(pct, 55_f64);
         let (lang, size, pct) = iter.next().unwrap();
         assert_eq!(lang, SymbolLang::C);
         assert_eq!(size.as_u64(), 50);
         assert_eq!(pct, 25_f64);
         let (lang, size, pct) = iter.next().unwrap();
-        assert_eq!(lang, SymbolLang::Rust);
-        assert_eq!(size.as_u64(), 110);
-        assert_eq!(pct, 55_f64);
+        assert_eq!(lang, SymbolLang::Cpp);
+        assert_eq!(size.as_u64(), 40);
+        assert_eq!(pct, 20_f64);
     }
 
     #[test]
@@ -117,17 +117,17 @@ mod langreport_tests {
 
         let mut iter = r.iter_region(MemoryRegion::Rom);
         let (lang, size, pct) = iter.next().unwrap();
-        assert_eq!(lang, SymbolLang::Cpp);
-        assert_eq!(size.as_u64(), 25);
-        assert_eq!(pct, 25_f64);
+        assert_eq!(lang, SymbolLang::C);
+        assert_eq!(size.as_u64(), 40);
+        assert_eq!(pct, 40_f64);
         let (lang, size, pct) = iter.next().unwrap();
         assert_eq!(lang, SymbolLang::Rust);
         assert_eq!(size.as_u64(), 35);
         assert_eq!(pct, 35_f64);
         let (lang, size, pct) = iter.next().unwrap();
-        assert_eq!(lang, SymbolLang::C);
-        assert_eq!(size.as_u64(), 40);
-        assert_eq!(pct, 40_f64);
+        assert_eq!(lang, SymbolLang::Cpp);
+        assert_eq!(size.as_u64(), 25);
+        assert_eq!(pct, 25_f64);
     }
 
     #[test]
@@ -136,17 +136,17 @@ mod langreport_tests {
 
         let mut iter = r.iter_region(MemoryRegion::Ram);
         let (lang, size, pct) = iter.next().unwrap();
-        assert_eq!(lang, SymbolLang::C);
-        assert_eq!(size.as_u64(), 10);
-        assert_eq!(pct, 10_f64);
+        assert_eq!(lang, SymbolLang::Rust);
+        assert_eq!(size.as_u64(), 75);
+        assert_eq!(pct, 75_f64);
         let (lang, size, pct) = iter.next().unwrap();
         assert_eq!(lang, SymbolLang::Cpp);
         assert_eq!(size.as_u64(), 15);
         assert_eq!(pct, 15_f64);
         let (lang, size, pct) = iter.next().unwrap();
-        assert_eq!(lang, SymbolLang::Rust);
-        assert_eq!(size.as_u64(), 75);
-        assert_eq!(pct, 75_f64);
+        assert_eq!(lang, SymbolLang::C);
+        assert_eq!(size.as_u64(), 10);
+        assert_eq!(pct, 10_f64);
     }
 
     #[test]
@@ -157,7 +157,7 @@ mod langreport_tests {
         r.print(MemoryRegion::Both, false, &mut result).unwrap();
 
         let re = Regex::new(r"\s*(\w+)\s*\|\s*(\S.*\S)\s*\|\s*([\d.]+)\s*").unwrap();
-        let mut data_iter = r.iter_region(MemoryRegion::Both).rev();
+        let mut data_iter = r.iter_region(MemoryRegion::Both);
 
         for line in std::str::from_utf8(&result).unwrap().lines() {
             let caps = match re.captures(line) {
@@ -180,7 +180,7 @@ mod langreport_tests {
         r.print(MemoryRegion::Both, true, &mut result).unwrap();
 
         let re = Regex::new(r"\s*(\w+)\s*\|\s*(\S.*\S)\s*\|\s*([\d.]+)\s*").unwrap();
-        let mut data_iter = r.iter_region(MemoryRegion::Both).rev();
+        let mut data_iter = r.iter_region(MemoryRegion::Both);
 
         for line in std::str::from_utf8(&result).unwrap().lines() {
             let caps = match re.captures(line) {
@@ -203,7 +203,7 @@ mod langreport_tests {
         r.print(MemoryRegion::Rom, true, &mut result).unwrap();
 
         let re = Regex::new(r"\s*(\w+)\s*\|\s*(\S.*\S)\s*\|\s*([\d.]+)\s*").unwrap();
-        let mut data_iter = r.iter_region(MemoryRegion::Rom).rev();
+        let mut data_iter = r.iter_region(MemoryRegion::Rom);
 
         for line in std::str::from_utf8(&result).unwrap().lines() {
             let caps = match re.captures(line) {
@@ -226,7 +226,7 @@ mod langreport_tests {
         r.print(MemoryRegion::Ram, true, &mut result).unwrap();
 
         let re = Regex::new(r"\s*(\w+)\s*\|\s*(\S.*\S)\s*\|\s*([\d.]+)\s*").unwrap();
-        let mut data_iter = r.iter_region(MemoryRegion::Ram).rev();
+        let mut data_iter = r.iter_region(MemoryRegion::Ram);
 
         for line in std::str::from_utf8(&result).unwrap().lines() {
             let caps = match re.captures(line) {
