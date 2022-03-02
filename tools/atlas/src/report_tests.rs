@@ -4,15 +4,15 @@ mod totalmem_tests {
 
     #[test]
     fn new() {
-        let m = TotalMem::new(123, 456);
+        let m = CombinedMem::new(123, 456);
         assert_eq!(m.rom.as_u64(), 123);
         assert_eq!(m.ram.as_u64(), 456);
     }
 
     #[test]
     fn add() {
-        let first = TotalMem::new(110, 33);
-        let second = TotalMem::new(450, 99);
+        let first = CombinedMem::new(110, 33);
+        let second = CombinedMem::new(450, 99);
         let sum = first + second;
         assert_eq!(sum.rom.as_u64(), 560);
         assert_eq!(sum.ram.as_u64(), 132);
@@ -27,24 +27,24 @@ mod langreport_tests {
 
     lazy_static! {
         static ref TEST_REPORT: LangReport = LangReport::new(
-            TotalMem::new(40, 10),
-            TotalMem::new(25, 15),
-            TotalMem::new(35, 75),
+            CombinedMem::new(40, 10),
+            CombinedMem::new(25, 15),
+            CombinedMem::new(35, 75),
         );
     }
 
     #[test]
     fn new() {
         let r = LangReport::new(
-            TotalMem {
+            CombinedMem {
                 rom: ByteSize::b(1),
                 ram: ByteSize::b(2),
             },
-            TotalMem {
+            CombinedMem {
                 rom: ByteSize::b(3),
                 ram: ByteSize::b(4),
             },
-            TotalMem {
+            CombinedMem {
                 rom: ByteSize::b(5),
                 ram: ByteSize::b(6),
             },

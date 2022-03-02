@@ -26,7 +26,7 @@ pub mod sym;
 pub use sym::{MemoryRegion, RawSymbol, Symbol, SymbolLang, SymbolType};
 
 pub mod report;
-pub use report::{LangReport, SymbolReport, TotalMem};
+pub use report::{LangReport, SymbolReport, CombinedMem};
 
 #[cfg(test)]
 #[path = "./lib_tests.rs"]
@@ -187,7 +187,7 @@ impl Atlas {
     /// RAM, both).
     pub fn report_lang(&self) -> Option<LangReport> {
         let syms = self.syms.as_ref()?;
-        let c = TotalMem::new(
+        let c = CombinedMem::new(
             syms.iter()
                 .filter(|s| s.lang == SymbolLang::C)
                 .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
@@ -198,7 +198,7 @@ impl Atlas {
                 .fold(0, |acc, s| acc + s.size as u64),
         );
 
-        let cpp = TotalMem::new(
+        let cpp = CombinedMem::new(
             syms.iter()
                 .filter(|s| s.lang == SymbolLang::Cpp)
                 .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)
@@ -209,7 +209,7 @@ impl Atlas {
                 .fold(0, |acc, s| acc + s.size as u64),
         );
 
-        let rust = TotalMem::new(
+        let rust = CombinedMem::new(
             syms.iter()
                 .filter(|s| s.lang == SymbolLang::Rust)
                 .filter(|s| s.sym_type.mem_region() == MemoryRegion::Rom)

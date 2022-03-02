@@ -11,27 +11,25 @@ use std::{fmt::Debug, io::Write, ops::Add};
 #[path = "./report_tests.rs"]
 mod report_tests;
 
-/// Type for storing the ROM and RAM usage of some entity (e.g., language). The
-/// name is very misleading and should be changed ASAP!
-// FIXME: Needs to be renamed!
+/// Type for storing the ROM and RAM usage of some entity (e.g., language).
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
-pub struct TotalMem {
+pub struct CombinedMem {
     rom: ByteSize,
     ram: ByteSize,
 }
 
-impl TotalMem {
+impl CombinedMem {
     /// Creates a new instance with the sizes of the ROM and RAM usages provided
     /// in bytes.
     pub fn new(rom: u64, ram: u64) -> Self {
-        TotalMem {
+        CombinedMem {
             rom: ByteSize::b(rom),
             ram: ByteSize::b(ram),
         }
     }
 }
 
-impl Add for TotalMem {
+impl Add for CombinedMem {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
@@ -46,14 +44,14 @@ impl Add for TotalMem {
 /// language.
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub struct LangReport {
-    c: TotalMem,
-    cpp: TotalMem,
-    rust: TotalMem,
+    c: CombinedMem,
+    cpp: CombinedMem,
+    rust: CombinedMem,
 }
 
 impl LangReport {
     /// Creates a new [`LangReport`].
-    pub(crate) fn new(c: TotalMem, cpp: TotalMem, rust: TotalMem) -> Self {
+    pub(crate) fn new(c: CombinedMem, cpp: CombinedMem, rust: CombinedMem) -> Self {
         LangReport { c, cpp, rust }
     }
 
