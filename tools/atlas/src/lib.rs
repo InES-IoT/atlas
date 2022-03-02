@@ -96,7 +96,7 @@ impl Atlas {
     }
 
     /// Adds libraries to the [`Atlas`] struct which will be used to determine
-    /// their origin when calling [`analyze`]. The path can be either absolute
+    /// their origin when calling [`Atlas::analyze`]. The path can be either absolute
     /// or relative.
     pub fn add_lib<T>(&mut self, lang: SymbolLang, lib_path: T) -> Result<(), Error>
     where
