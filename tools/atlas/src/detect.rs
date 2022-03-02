@@ -115,8 +115,14 @@ impl LangDetector {
                 Err(_) => continue,
             };
 
-            // TODO:
-            // Why is this check here? Find out and make a comment here.
+            // The symbols that have distinct mangled and demangled names are added to the parsed
+            // library without any further checks. Symbols, where the mangled and demangled names
+            // match, are further checked to be valid C identifiers. I.e., underscores, lower- or
+            // uppercase letters, or numbers (not allowed for the first character). Additionally,
+            // the dot "." character is also allowed as it seems to be used for symbols in RAM like
+            // "000194f0 00000018 b object.8916". This logic thus excludes symbols like
+            // ".Lanon.4575732b5f0a476c725a4805a4f03b6f.638" for example, which seem to be unused
+            // symbols from Rust static libraries.
             if s.mangled == s.demangled {
                 // TODO:
                 // Rewrite this using a simple regex and check the performance
@@ -128,7 +134,7 @@ impl LangDetector {
                         // Reuse the iterator here?
                         if s.mangled
                             .chars()
-                            .all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '0'..='9'))
+                            .all(|c| matches!(c, 'a'..='z' | 'A'..='Z' | '_' | '.' | '0'..='9'))
                         {
                             parsed_lib.syms.push(s);
                         }

@@ -120,10 +120,21 @@ mod langdetector_tests {
         assert_eq!(detector.libs[0].syms.len(), 4);
         assert_eq!(detector.libs[1].path.file_name().unwrap(), "librust_lib.a");
         assert_eq!(detector.libs[1].lang, SymbolLang::Rust);
-        // TODO:
-        // The amount of symbols has been determined using Atlas itself. Verify this using nm and rg
-        // directly in the terminal.
-        assert_eq!(detector.libs[1].syms.len(), 1796);
+        // The amount of symbols has been determined using the following regexes directly in the
+        // terminal.
+        //
+        // This gets *almost* all demangled symbols and counts them:
+        // `arm-none-eabi-nm --print-size --size-sort --demangle librust_lib.a | rg "^[[:xdigit:]]{8} [[:xdigit:]]{8} [a-zA-Z\-?] [ &,\(\)\[\]{}<>+:*a-zA-Z0-9_]*\$" | wc -l`
+        //
+        // Symbols that didn't get completely demangled and those with dots "." are not found by the
+        // regex above. See the comment in `LangDectector::add_lib` for further information on dots
+        // in symbol names.
+        //
+        // This command prints all the lines that DID NOT match before:
+        // `arm-none-eabi-nm --print-size --size-sort --demangle librust_lib.a | rg -v "^[[:xdigit:]]{8} [[:xdigit:]]{8} [a-zA-Z\-?] [ &,\(\)\[\]{}<>+:*a-zA-Z0-9_]*\$"`
+        //
+        // This can then be easily checked by hand to determine the actual amount of symbols.
+        assert_eq!(detector.libs[1].syms.len(), 1809);
     }
 
     #[test]

@@ -323,7 +323,7 @@ fn report_lang_size() {
     );
     assert_eq!(
         report.size(SymbolLang::C, MemoryRegion::Both).as_u64(),
-        176808
+        176628
     );
     assert_eq!(
         report.size(SymbolLang::Cpp, MemoryRegion::Both).as_u64(),
@@ -331,7 +331,7 @@ fn report_lang_size() {
     );
     assert_eq!(
         report.size(SymbolLang::Rust, MemoryRegion::Both).as_u64(),
-        28981
+        29161
     );
 
     assert_eq!(
@@ -340,7 +340,7 @@ fn report_lang_size() {
     );
     assert_eq!(
         report.size(SymbolLang::C, MemoryRegion::Rom).as_u64(),
-        126789
+        126609
     );
     assert_eq!(
         report.size(SymbolLang::Cpp, MemoryRegion::Rom).as_u64(),
@@ -348,7 +348,7 @@ fn report_lang_size() {
     );
     assert_eq!(
         report.size(SymbolLang::Rust, MemoryRegion::Rom).as_u64(),
-        28981
+        29161
     );
 
     assert_eq!(
@@ -375,14 +375,14 @@ fn report_lang_size_pct() {
     let report = at.report_lang().unwrap();
 
     assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Both) - 100_f64).abs() < 1e-8);
-    assert!((report.size_pct(SymbolLang::C, MemoryRegion::Both) - 48.48584568).abs() < 1e-8);
+    assert!((report.size_pct(SymbolLang::C, MemoryRegion::Both) - 48.43648450).abs() < 1e-8);
     assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Both) - 43.56672947).abs() < 1e-8);
-    assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Both) - 7.947424854).abs() < 1e-8);
+    assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Both) - 7.996786038).abs() < 1e-8);
 
     assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Rom) - 100_f64).abs() < 1e-8);
-    assert!((report.size_pct(SymbolLang::C, MemoryRegion::Rom) - 44.12876415).abs() < 1e-8);
+    assert!((report.size_pct(SymbolLang::C, MemoryRegion::Rom) - 44.06611536).abs() < 1e-8);
     assert!((report.size_pct(SymbolLang::Cpp, MemoryRegion::Rom) - 45.78443247).abs() < 1e-8);
-    assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Rom) - 10.08680338).abs() < 1e-8);
+    assert!((report.size_pct(SymbolLang::Rust, MemoryRegion::Rom) - 10.14945217).abs() < 1e-8);
 
     assert!((report.size_pct(SymbolLang::Any, MemoryRegion::Ram) - 100_f64).abs() < 1e-8);
     assert!((report.size_pct(SymbolLang::C, MemoryRegion::Ram) - 64.67165742).abs() < 1e-8);
@@ -424,7 +424,7 @@ fn report_syms_single_lang() {
     at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
     let report = at.report_syms(vec![SymbolLang::C], MemoryRegion::Both, None).unwrap();
-    assert_eq!(report.into_iter().count(), 2193);
+    assert_eq!(report.into_iter().count(), 2187);
     assert!(report.into_iter().all(|s| s.lang == SymbolLang::C));
 }
 
