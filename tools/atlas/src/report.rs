@@ -119,9 +119,7 @@ impl LangReport {
         let mut table = Table::new();
 
         for x in self.iter_region(mem_type) {
-            // TODO:
-            // Implement Display for SymbolLang to get rid of this line.
-            let lang_string = format!("{:?}", x.0);
+            let lang_string = x.0.to_string();
             let size_string = if human_readable {
                 x.1.to_string_as(true)
             } else {
@@ -132,9 +130,7 @@ impl LangReport {
             );
         }
 
-        // Implement Display for MemoryRegion to get rid of this line.
-        let mem_string = format!("{:?}", &mem_type);
-        table.set_titles(row![&mem_string, "Size [Bytes]", "%age"]);
+        table.set_titles(row![mem_type.to_string(), "Size [Bytes]", "%age"]);
         table.set_format(*format::consts::FORMAT_NO_BORDER_LINE_SEPARATOR);
 
         // `?` uses `From<std::io::error> for Error` to convert the Error variant. This unpacks the
@@ -236,7 +232,7 @@ where
 
         for s in self.iter.clone() {
             let mut strings = Vec::new();
-            strings.push(format!("{:?}", &s.lang));
+            strings.push(s.lang.to_string());
             strings.push(s.demangled.clone());
             let size_string = if human_readable {
                 ByteSize::b(s.size as u64).to_string_as(true)
@@ -244,8 +240,8 @@ where
                 s.size.to_string()
             };
             strings.push(size_string);
-            strings.push(format!("{:?}", &s.sym_type));
-            strings.push(format!("{:?}", &s.sym_type.mem_region()));
+            strings.push(s.sym_type.to_string());
+            strings.push(s.sym_type.mem_region().to_string());
 
             // Get the widths of the strings in the current row.
             // Cell::get_width() exists but will be set to private on the next

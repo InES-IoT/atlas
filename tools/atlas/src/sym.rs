@@ -5,7 +5,8 @@ use crate::error::{Error, ErrorKind};
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::convert::{TryFrom, TryInto};
-use std::fmt::Debug;
+use std::fmt;
+use std::fmt::{Debug, Display, Formatter};
 use std::str::FromStr;
 
 #[cfg(test)]
@@ -24,6 +25,12 @@ pub enum MemoryRegion {
     /// Can be used as a parameter for methods to specify that both memory
     /// regions should be selected.
     Both,
+}
+
+impl Display for MemoryRegion {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        Debug::fmt(self, f)
+    }
 }
 
 impl FromStr for MemoryRegion {
@@ -58,6 +65,12 @@ pub enum SymbolLang {
     Rust,
     C,
     Cpp,
+}
+
+impl Display for SymbolLang {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        Debug::fmt(self, f)
+    }
 }
 
 impl FromStr for SymbolLang {
@@ -165,6 +178,12 @@ pub enum SymbolType {
     Stabs,
     /// `?` - The symbol type is unknown, or object file format specific.
     Unknown,
+}
+
+impl Display for SymbolType {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), fmt::Error> {
+        Debug::fmt(self, f)
+    }
 }
 
 impl FromStr for SymbolType {
