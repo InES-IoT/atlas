@@ -17,6 +17,6 @@ path = "src/lib.rs"
 bytesize = "1.1.0"
 clap = { version = "3.0.6", features = ["derive"] }
 lazy_static = "1.4.0"
-prettytable-rs = "0.8.0"
+prettytable-rs = "0.10.0"
 regex = "1.5.4"
 textwrap = { version = "0.14.2", features = ["terminal_size"] }
