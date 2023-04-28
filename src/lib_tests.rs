@@ -87,7 +87,7 @@ mod tests {
 
     #[test]
     fn nm_wrong_file_type() {
-        let mut at = Atlas::new(&*NM_PATH, "../README.md").unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "readme.md").unwrap();
         at.add_lib(SymbolLang::Rust, "aux/c_app_rust_lib/libs/liblib.a").unwrap();
         let err = at.analyze().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::Nm);
