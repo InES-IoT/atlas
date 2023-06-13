@@ -1,5 +1,5 @@
-use atlas::Atlas;
 use atlas::sym::{MemoryRegion, SymbolLang};
+use atlas::Atlas;
 use clap::Parser;
 use std::error::Error;
 use std::path::PathBuf;

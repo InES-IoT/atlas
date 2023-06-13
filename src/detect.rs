@@ -20,11 +20,11 @@ pub struct Library {
 impl Library {
     pub fn new<T>(lang: SymbolLang, path: T) -> Self
     where
-        T: AsRef<Path>
+        T: AsRef<Path>,
     {
         Self {
             path: path.as_ref().to_path_buf(),
-            lang
+            lang,
         }
     }
 }
@@ -173,7 +173,7 @@ impl LangDetector {
         for lib in self.libs.iter() {
             if lib.syms.iter().any(|lib_sym| sym.related(lib_sym)) {
                 sym.lang = lib.lang;
-                return Ok(sym)
+                return Ok(sym);
             }
         }
 

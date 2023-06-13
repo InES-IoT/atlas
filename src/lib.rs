@@ -26,7 +26,7 @@ pub mod sym;
 pub use sym::{MemoryRegion, RawSymbol, Symbol, SymbolLang, SymbolType};
 
 pub mod report;
-pub use report::{LangReport, SymbolReport, CombinedMem};
+pub use report::{CombinedMem, LangReport, SymbolReport};
 
 #[cfg(test)]
 #[path = "./lib_tests.rs"]
@@ -75,12 +75,8 @@ impl Atlas {
     {
         let curr = std::env::current_dir().unwrap();
 
-        let nm = curr
-            .join(nm.as_ref())
-            .canonicalize()?;
-        let elf = curr
-            .join(elf.as_ref())
-            .canonicalize()?;
+        let nm = curr.join(nm.as_ref()).canonicalize()?;
+        let elf = curr.join(elf.as_ref()).canonicalize()?;
 
         // Check permission by opening and closing files
         let _ = File::open(&nm)?;
@@ -104,9 +100,7 @@ impl Atlas {
     {
         let curr = std::env::current_dir().unwrap();
 
-        let lib = curr
-            .join(lib_path.as_ref())
-            .canonicalize()?;
+        let lib = curr.join(lib_path.as_ref()).canonicalize()?;
 
         // Check permission by opening and closing files
         let _ = File::open(&lib)?;

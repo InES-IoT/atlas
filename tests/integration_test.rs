@@ -4,7 +4,9 @@
 //! folder. Maybe all the tests requiring such files should be placed in the
 //! integration tests and not in the unittests.
 
-use atlas::{Atlas, ErrorKind, LangDetector, Library, MemoryRegion, Symbol, SymbolLang, SymbolType};
+use atlas::{
+    Atlas, ErrorKind, LangDetector, Library, MemoryRegion, Symbol, SymbolLang, SymbolType,
+};
 use lazy_static::lazy_static;
 use std::process::Command;
 
@@ -26,7 +28,7 @@ lazy_static! {
                     .expect("UTF-8 error while parsing the output from \"which arm-none-eabi-nm\"")
                     .lines()
                     .next()
-                    .unwrap()
+                    .unwrap(),
             )
         }
     };
@@ -395,7 +397,9 @@ fn report_syms() {
     let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
     at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
-    let report = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, Some(6)).unwrap();
+    let report = at
+        .report_syms(vec![SymbolLang::Any], MemoryRegion::Both, Some(6))
+        .unwrap();
     assert_eq!(report.into_iter().count(), 6);
     let mut iter = report.into_iter();
     let s = iter.next().unwrap();
@@ -414,7 +418,9 @@ fn report_syms_no_maxcount() {
     let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
     at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
-    let report = at.report_syms(vec![SymbolLang::Any], MemoryRegion::Both, None).unwrap();
+    let report = at
+        .report_syms(vec![SymbolLang::Any], MemoryRegion::Both, None)
+        .unwrap();
     assert_eq!(report.into_iter().count(), 4142);
 }
 
@@ -423,7 +429,9 @@ fn report_syms_single_lang() {
     let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
     at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
-    let report = at.report_syms(vec![SymbolLang::C], MemoryRegion::Both, None).unwrap();
+    let report = at
+        .report_syms(vec![SymbolLang::C], MemoryRegion::Both, None)
+        .unwrap();
     assert_eq!(report.into_iter().count(), 2187);
     assert!(report.into_iter().all(|s| s.lang == SymbolLang::C));
 }
@@ -433,11 +441,13 @@ fn report_syms_double_lang() {
     let mut at = Atlas::new(&*NM_PATH, "aux/rust_minimal_node.elf").unwrap();
     at.add_lib(SymbolLang::Rust, "aux/libsecprint.a").unwrap();
     assert!(at.analyze().is_ok());
-    let report = at.report_syms(
-        vec![SymbolLang::C, SymbolLang::Rust],
-        MemoryRegion::Both,
-        None,
-    ).unwrap();
+    let report = at
+        .report_syms(
+            vec![SymbolLang::C, SymbolLang::Rust],
+            MemoryRegion::Both,
+            None,
+        )
+        .unwrap();
     assert_eq!(report.into_iter().count(), 2514);
     assert!(!report.into_iter().any(|s| s.lang == SymbolLang::Cpp));
 }

@@ -538,4 +538,3 @@ mod symbol_tests {
         assert!(!sym.related(&lib));
     }
 }
-

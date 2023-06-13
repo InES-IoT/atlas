@@ -125,9 +125,7 @@ impl LangReport {
             } else {
                 x.1.as_u64().to_string()
             };
-            let _ = table.add_row(
-                row!(lang_string, size_string, format!("{:.1}", x.2))
-            );
+            let _ = table.add_row(row!(lang_string, size_string, format!("{:.1}", x.2)));
         }
 
         table.set_titles(row![mem_type.to_string(), "Size [Bytes]", "%age"]);
@@ -146,7 +144,7 @@ impl LangReport {
     /// one.
     pub fn iter_region(
         &self,
-        mem_region: MemoryRegion
+        mem_region: MemoryRegion,
     ) -> std::vec::IntoIter<(SymbolLang, ByteSize, f64)> {
         // NOTE:
         // In order to be able to sort something, you HAVE to have all the data.
@@ -209,11 +207,7 @@ where
     /// of lines printed which is bubbled up in case of success. However, the
     /// terminal might be so narrow,  that even wrapping the `name` row is not
     /// enough. In this case, an error is returned ([`ErrorKind::TableFormat`]).
-    pub fn print(
-        &self,
-        human_readable: bool,
-        writer: &mut impl Write
-    ) -> Result<usize, Error> {
+    pub fn print(&self, human_readable: bool, writer: &mut impl Write) -> Result<usize, Error> {
         const WRAPPED_COLUMN: usize = 1;
 
         let mut table = Table::new();
@@ -225,10 +219,7 @@ where
             "Symbol Type",
             "Memory Region",
         ];
-        let mut max_widths = title_arr
-            .iter()
-            .map(|s| s.len())
-            .collect::<Vec<usize>>();
+        let mut max_widths = title_arr.iter().map(|s| s.len()).collect::<Vec<usize>>();
 
         for s in self.iter.clone() {
             let mut strings = Vec::new();
@@ -252,10 +243,7 @@ where
             // Cell::get_content returns a string of its content. Maybe this
             // could be used to iterate over an already assembled table and get
             // the max widths.
-            let current_widths = strings
-                .iter()
-                .map(|s| s.len())
-                .collect::<Vec<usize>>();
+            let current_widths = strings.iter().map(|s| s.len()).collect::<Vec<usize>>();
 
             // Keep track of the largest width for each corresponding column.
             max_widths
@@ -286,9 +274,7 @@ where
             .and_then(|w| w.checked_sub(max_widths.len() - 1))
             // All the text widths except the column that will be wrapped.
             .and_then(|w| {
-                w.checked_sub(
-                    max_widths.iter().sum::<usize>() - max_widths[WRAPPED_COLUMN]
-                )
+                w.checked_sub(max_widths.iter().sum::<usize>() - max_widths[WRAPPED_COLUMN])
             })
             .ok_or_else(|| Error::new(ErrorKind::TableFormat))?;
 

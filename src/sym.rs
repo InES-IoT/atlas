@@ -477,4 +477,3 @@ impl Symbol {
             || (self.size != other.size))
     }
 }
-
