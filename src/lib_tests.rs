@@ -8,25 +8,29 @@ mod tests {
     lazy_static! {
         static ref NM_PATH: String = {
             if let Ok(path) = std::env::var("NM_PATH") {
-                path
-            } else {
-                let out = Command::new("which")
-                    .arg("arm-none-eabi-nm")
+                // let version_out = Command::new(path.as_ref()).arg("--version").output();
+                let version_out = Command::new(path.as_str())
+                    .arg("--version")
                     .output()
-                    .expect("NM_PATH env. variable not set and \"which arm-none-eabi-nm\" failed.");
-                if !out.status.success() {
-                    panic!("\"which arm-none-eabi-nm\" found nothing.");
+                    .expect("Error while getting version from NM utility specified in environment variable NM_PATH.");
+
+                if !version_out.status.success() {
+                    panic!(
+                        "NM successfully invoked but returned an error code: {}",
+                        version_out.status.code().unwrap()
+                    );
                 }
 
-                String::from(
-                    std::str::from_utf8(&out.stdout)
-                        .expect(
-                            "UTF-8 error while parsing the output from \"which arm-none-eabi-nm\"",
-                        )
-                        .lines()
-                        .next()
-                        .unwrap(),
-                )
+                let version_str = std::str::from_utf8(&version_out.stdout)
+                    .expect("Error while decoding version output from NM.");
+
+                if !version_str.contains("9-2019-q4-major") {
+                    panic!("Wrong NM version set in NM_PATH! Please provide path to version 9-2019-q4-major.");
+                }
+
+                path
+            } else {
+                panic!("Please specify the path to the NM executable version 9-2019-q4-major in the environment variable NM_PATH.");
             }
         };
     }
