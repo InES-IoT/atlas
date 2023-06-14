@@ -57,3 +57,6 @@ git clone https://github.zhaw.ch/InESTeamIOT/rust4iot.git
 cd rust4iot/tools/atlas
 cargo install --path .
 ```
+
+## Minimum Supported Rust Version (MSRV)
+Requires Rust version `1.56.1` and later.
