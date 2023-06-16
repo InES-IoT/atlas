@@ -74,7 +74,7 @@ mod tests {
     #[test]
     fn add_lib_canonicalize() {
         let mut at = Atlas::new(&*NM_PATH, file!()).unwrap();
-        at.add_lib(SymbolLang::Rust, "./aux/../src/../Cargo.toml")
+        at.add_lib(SymbolLang::Rust, "./test_data/../src/../Cargo.toml")
             .unwrap();
     }
 
@@ -97,7 +97,7 @@ mod tests {
     #[test]
     fn nm_wrong_file_type() {
         let mut at = Atlas::new(&*NM_PATH, "readme.md").unwrap();
-        at.add_lib(SymbolLang::Rust, "aux/c_app_rust_lib/libs/liblib.a")
+        at.add_lib(SymbolLang::Rust, "test_data/c_app_rust_lib/libs/liblib.a")
             .unwrap();
         let err = at.analyze().unwrap_err();
         assert_eq!(err.kind(), ErrorKind::Nm);
@@ -114,7 +114,7 @@ mod tests {
 
     #[test]
     fn analyze_c_no_lib() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/c_app/app").unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "test_data/c_app/app").unwrap();
         at.analyze().unwrap();
         assert_eq!(at.fails.as_ref().unwrap().len(), 0);
         let syms = at.syms.as_ref().unwrap();
@@ -136,8 +136,8 @@ mod tests {
 
     #[test]
     fn analyze_c_app_rust_lib() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/c_app_rust_lib/app").unwrap();
-        at.add_lib(SymbolLang::Rust, "aux/c_app_rust_lib/libs/liblib.a")
+        let mut at = Atlas::new(&*NM_PATH, "test_data/c_app_rust_lib/app").unwrap();
+        at.add_lib(SymbolLang::Rust, "test_data/c_app_rust_lib/libs/liblib.a")
             .unwrap();
         at.analyze().unwrap();
         assert_eq!(at.fails.as_ref().unwrap().len(), 0);
@@ -182,12 +182,15 @@ mod tests {
 
     #[test]
     fn analyze_c_app_c_lib_rust_lib() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/c_app_c_lib_rust_lib/app").unwrap();
-        at.add_lib(SymbolLang::C, "aux/c_app_c_lib_rust_lib/libs/libc_lib.a")
-            .unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "test_data/c_app_c_lib_rust_lib/app").unwrap();
+        at.add_lib(
+            SymbolLang::C,
+            "test_data/c_app_c_lib_rust_lib/libs/libc_lib.a",
+        )
+        .unwrap();
         at.add_lib(
             SymbolLang::Rust,
-            "aux/c_app_c_lib_rust_lib/libs/librust_lib.a",
+            "test_data/c_app_c_lib_rust_lib/libs/librust_lib.a",
         )
         .unwrap();
         at.analyze().unwrap();
@@ -233,7 +236,7 @@ mod tests {
 
     #[test]
     fn report_lang_c_no_lib() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/c_app/app").unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "test_data/c_app/app").unwrap();
         at.analyze().unwrap();
         let lang_rep = at.report_lang().unwrap();
         assert_eq!(
@@ -290,8 +293,8 @@ mod tests {
 
     #[test]
     fn report_lang_c_app_rust_lib() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/c_app_rust_lib/app").unwrap();
-        at.add_lib(SymbolLang::Rust, "aux/c_app_rust_lib/libs/liblib.a")
+        let mut at = Atlas::new(&*NM_PATH, "test_data/c_app_rust_lib/app").unwrap();
+        at.add_lib(SymbolLang::Rust, "test_data/c_app_rust_lib/libs/liblib.a")
             .unwrap();
         at.analyze().unwrap();
         let lang_rep = at.report_lang().unwrap();
@@ -355,12 +358,15 @@ mod tests {
 
     #[test]
     fn report_lang_c_app_c_lib_rust_lib() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/c_app_c_lib_rust_lib/app").unwrap();
-        at.add_lib(SymbolLang::C, "aux/c_app_c_lib_rust_lib/libs/libc_lib.a")
-            .unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "test_data/c_app_c_lib_rust_lib/app").unwrap();
+        at.add_lib(
+            SymbolLang::C,
+            "test_data/c_app_c_lib_rust_lib/libs/libc_lib.a",
+        )
+        .unwrap();
         at.add_lib(
             SymbolLang::Rust,
-            "aux/c_app_c_lib_rust_lib/libs/librust_lib.a",
+            "test_data/c_app_c_lib_rust_lib/libs/librust_lib.a",
         )
         .unwrap();
         at.analyze().unwrap();
@@ -425,7 +431,7 @@ mod tests {
 
     #[test]
     fn report_lang_iter_c_app_no_lib() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/c_app/app").unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "test_data/c_app/app").unwrap();
         at.analyze().unwrap();
         let lang_rep = at.report_lang().unwrap();
         let mut iter = lang_rep.iter_region(MemoryRegion::Both);
@@ -448,8 +454,8 @@ mod tests {
 
     #[test]
     fn report_lang_iter_c_app_rust_lib() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/c_app_rust_lib/app").unwrap();
-        at.add_lib(SymbolLang::Rust, "aux/c_app_rust_lib/libs/liblib.a")
+        let mut at = Atlas::new(&*NM_PATH, "test_data/c_app_rust_lib/app").unwrap();
+        at.add_lib(SymbolLang::Rust, "test_data/c_app_rust_lib/libs/liblib.a")
             .unwrap();
         at.analyze().unwrap();
         let lang_rep = at.report_lang().unwrap();
@@ -473,12 +479,15 @@ mod tests {
 
     #[test]
     fn report_lang_iter_c_app_c_lib_rust_lib() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/c_app_c_lib_rust_lib/app").unwrap();
-        at.add_lib(SymbolLang::C, "aux/c_app_c_lib_rust_lib/libs/libc_lib.a")
-            .unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "test_data/c_app_c_lib_rust_lib/app").unwrap();
+        at.add_lib(
+            SymbolLang::C,
+            "test_data/c_app_c_lib_rust_lib/libs/libc_lib.a",
+        )
+        .unwrap();
         at.add_lib(
             SymbolLang::Rust,
-            "aux/c_app_c_lib_rust_lib/libs/librust_lib.a",
+            "test_data/c_app_c_lib_rust_lib/libs/librust_lib.a",
         )
         .unwrap();
         at.analyze().unwrap();
@@ -522,7 +531,7 @@ mod tests {
 
     #[test]
     fn report_syms_iter_c_app_no_lib() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/c_app/app").unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "test_data/c_app/app").unwrap();
         at.analyze().unwrap();
         let syms_rep = at
             .report_syms(vec![SymbolLang::Any], MemoryRegion::Both, Some(6))
@@ -542,8 +551,8 @@ mod tests {
 
     #[test]
     fn report_syms_iter_c_app_rust_lib() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/c_app_rust_lib/app").unwrap();
-        at.add_lib(SymbolLang::Rust, "aux/c_app_rust_lib/libs/liblib.a")
+        let mut at = Atlas::new(&*NM_PATH, "test_data/c_app_rust_lib/app").unwrap();
+        at.add_lib(SymbolLang::Rust, "test_data/c_app_rust_lib/libs/liblib.a")
             .unwrap();
         at.analyze().unwrap();
 
@@ -589,12 +598,15 @@ mod tests {
 
     #[test]
     fn report_syms_iter_c_app_c_lib_rust_lib() {
-        let mut at = Atlas::new(&*NM_PATH, "aux/c_app_c_lib_rust_lib/app").unwrap();
-        at.add_lib(SymbolLang::C, "aux/c_app_c_lib_rust_lib/libs/libc_lib.a")
-            .unwrap();
+        let mut at = Atlas::new(&*NM_PATH, "test_data/c_app_c_lib_rust_lib/app").unwrap();
+        at.add_lib(
+            SymbolLang::C,
+            "test_data/c_app_c_lib_rust_lib/libs/libc_lib.a",
+        )
+        .unwrap();
         at.add_lib(
             SymbolLang::Rust,
-            "aux/c_app_c_lib_rust_lib/libs/librust_lib.a",
+            "test_data/c_app_c_lib_rust_lib/libs/librust_lib.a",
         )
         .unwrap();
         at.analyze().unwrap();
